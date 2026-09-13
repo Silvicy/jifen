@@ -430,6 +430,19 @@ const server = http.createServer((req, res) => {
       return ok(res, { ok: true, accounts: accounts.map(a => ({ id: a.id, name: a.name, role: a.role, directDims: a.directDims || [], canDeclare: !!a.canDeclare })) });
     }
 
+    // 修改自己的密码（任何已登录账号，需验证原密码）
+    if (p === '/api/mypin' && method === 'POST') {
+      const t = accounts.find(x => x.id === acc.id);
+      if (!t) return err(res, 404, '账号不存在');
+      if (String(b.oldPin || '') !== String(t.pin)) return err(res, 400, '当前密码不正确');
+      const np = String(b.newPin || '');
+      if (!/^\d{4,}$/.test(np)) return err(res, 400, '新密码需为至少 4 位数字');
+      if (np === String(t.pin)) return err(res, 400, '新密码不能与当前密码相同');
+      t.pin = np;
+      saveAccounts();
+      return ok(res, { ok: true });
+    }
+
     // 数据备份：导出（仅管理员）
     if (p === '/api/export' && method === 'GET') {
       if (acc.role !== 'admin') return err(res, 403, '仅管理员可导出数据');

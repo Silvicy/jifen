@@ -323,6 +323,7 @@
   <div class="sheet" style="text-align:center;">
     <h3 id="menuName">—</h3>
     <div class="desc" id="menuRole">—</div>
+    <button id="menuPinBtn" class="btn-ghost" style="width:100%;padding:13px;border:none;border-radius:14px;font-size:15px;font-weight:800;background:#F1F5F9;margin-bottom:8px;" onclick="changeMyPin()">🔑 修改我的密码</button>
     <button class="btn-ghost" style="width:100%;padding:13px;border:none;border-radius:14px;font-size:15px;font-weight:800;background:#F1F5F9;" onclick="logout()">退出登录 / 切换账号</button>
   </div>
 </div>
@@ -524,6 +525,12 @@ const Local = {
       localStorage.setItem(LS_USER,a.id);
       return {token:a.id,name:a.name,role:a.role,id:a.id,directDims:a.directDims||[],canDeclare:!!a.canDeclare}; }
     const acc = ACCOUNTS.find(a=>a.id===ME.id);
+    if(path==='/api/mypin'){ const a=ACCOUNTS.find(x=>x.id===ME.id);
+      if(!a||String(a.pin)!==String(body.oldPin||'')) return {error:'当前密码不正确',_c:400};
+      const np=String(body.newPin||'');
+      if(!/^\d{4,}$/.test(np)) return {error:'新密码需为至少 4 位数字',_c:400};
+      if(np===String(a.pin)) return {error:'新密码不能与当前密码相同',_c:400};
+      a.pin=np; this.saveAccts(ACCOUNTS); return {ok:true}; }
     if(path==='/api/state'){ return this.loadState(); }
     if(path==='/api/record'){ const st=this.loadState(); const item=RULES.items.find(i=>i.name===body.item);
       if(!item) return {error:'项目不存在',_c:400};
@@ -1117,7 +1124,20 @@ async function resetPin(id){ const a=ACCOUNTS.find(x=>x.id===id); const np=promp
 async function setCarer(c){ try{ await call('/api/carer',{carer:c}); await fetchState(); renderAdmin(); toast('带娃备注：'+c); }catch(e){ toast(e.message); } }
 
 /* ============ 菜单 / 工具 ============ */
-function openMenu(){ if(!ME)return; document.getElementById('menuName').textContent=ME.name; document.getElementById('menuRole').textContent=ME.role==='admin'?'管理员':ME.role==='kid'?'宝宝':'长辈'; document.getElementById('menuMask').classList.add('on'); }
+function openMenu(){ if(!ME)return; document.getElementById('menuName').textContent=ME.name; document.getElementById('menuRole').textContent=ME.role==='admin'?'管理员':ME.role==='kid'?'宝宝':'长辈';
+  // 宝宝账号不给改密码入口（避免孩子把家长锁在门外），由管理员在管理页重置
+  const pb=document.getElementById('menuPinBtn'); if(pb) pb.style.display=(ME.role==='kid')?'none':'';
+  document.getElementById('menuMask').classList.add('on'); }
+async function changeMyPin(){
+  if(!ME) return;
+  const oldPin=prompt('请输入当前密码（4位数字）：'); if(oldPin===null)return;
+  const np=prompt('请输入新密码（4位数字）：'); if(np===null)return;
+  if(!/^\d{4,}$/.test(np)){ toast('新密码需为至少 4 位数字'); return; }
+  const np2=prompt('请再输入一次新密码：'); if(np2===null)return;
+  if(np!==np2){ toast('两次输入的新密码不一致'); return; }
+  try{ await call('/api/mypin',{oldPin,newPin:np}); toast('密码已修改 ✅ 下次登录请用新密码'); }
+  catch(e){ toast(e.message||'修改失败'); }
+}
 function showBanner(msg){ let b=document.querySelector('.banner'); if(!b){ b=document.createElement('div'); b.className='banner'; document.body.appendChild(b); } b.textContent=msg; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1800); }
 function sparkle(){ for(let i=0;i<8;i++){ const s=document.createElement('div'); s.className='sparkle'; s.textContent='⭐'; s.style.left=(Math.random()*80+10)+'vw'; s.style.top=(Math.random()*40+20)+'vh'; document.body.appendChild(s); setTimeout(()=>s.remove(),900); } }
