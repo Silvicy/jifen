@@ -1,0 +1,13 @@
+{
+  "name": "coconut-super-kid-bank",
+  "version": "4.0.0",
+  "private": true,
+  "description": "椰子小超人银行 · 家庭儿童行为积分系统（H5 + 轻量 Node 服务）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

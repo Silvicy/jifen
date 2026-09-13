@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>椰子小超人银行</title>
+<style>
+  :root{
+    --bg:#FFF7ED; --card:#FFFFFF; --ink:#3E2723; --sub:#8D6E63; --line:#F5E6D3;
+    --blue:#3B82F6; --orange:#F97316; --green:#22C55E; --yellow:#EAB308; --red:#EF4444;
+    --purple:#8B5CF6; --gold:#F59E0B; --gold2:#FBBF24;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;}
+  .app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--bg);position:relative;padding-bottom:78px;}
+  .topbar{position:sticky;top:0;z-index:30;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:10px 12px;}
+  .topbar .logo{font-size:17px;font-weight:900;background:linear-gradient(90deg,var(--gold),var(--red));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .topbar .spacer{flex:1;}
+  .modechip{font-size:10px;padding:3px 8px;border-radius:999px;font-weight:800;}
+  .modechip.server{background:#DCFCE7;color:#15803D;}
+  .modechip.local{background:#FEF3C7;color:#B45309;}
+  .top-btn{font-size:12px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--sub);font-weight:700;}
+  .rolechip{font-size:12px;background:#EEF2FF;color:#4338CA;padding:4px 10px;border-radius:999px;font-weight:800;}
+  .rolechip.admin{background:#FEF3C7;color:#B45309;}
+
+  /* hero */
+  .hero{background:linear-gradient(135deg,#FCD34D,#F59E0B);border-radius:24px;padding:18px 16px;margin:12px 12px 10px;color:#3E2723;box-shadow:0 8px 24px rgba(245,158,11,.28);position:relative;overflow:hidden;}
+  .hero::after{content:"🏦";position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:64px;opacity:.18;}
+  .hero .title{font-size:14px;font-weight:800;opacity:.85;}
+  .hero .big{font-size:46px;font-weight:900;line-height:1;margin-top:4px;}
+  .hero .sub{font-size:12px;font-weight:700;margin-top:6px;opacity:.9;}
+  .hero .progress{height:10px;background:rgba(255,255,255,.45);border-radius:999px;margin-top:10px;overflow:hidden;}
+  .hero .progress i{display:block;height:100%;background:#fff;border-radius:999px;transition:width .4s ease;}
+  .hero .meta{display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-top:6px;opacity:.85;}
+
+  /* dim strip（恢复：小卡片仅 图标+彩色分数） */
+  .dim-strip{display:flex;gap:8px;padding:10px 12px 2px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .dim-card{flex:0 0 auto;min-width:58px;background:#fff;border-radius:14px;padding:9px 8px 7px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.04);border:2px solid transparent;}
+  .dim-card.on{border-color:currentColor;background:#FFF8F0;}
+  .dim-card .e{font-size:22px;line-height:1;}
+  .dim-card .v{font-size:20px;font-weight:900;margin-top:2px;}
+
+  /* dim tabs（恢复：胶囊标签，选中深色） */
+  .dim-tabs{display:flex;gap:8px;padding:8px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .dim-tab{flex:0 0 auto;padding:8px 14px;border-radius:999px;background:#fff;font-size:13px;font-weight:800;color:var(--sub);display:flex;align-items:center;gap:5px;box-shadow:0 1px 4px rgba(0,0,0,.04);}
+  .dim-tab.on{background:#1F2937;color:#fff;box-shadow:none;}
+  .dim-tab .ic{font-size:15px;}
+
+  /* 维度小节头（恢复） */
+  .sec-head{display:flex;align-items:center;gap:8px;padding:10px 14px 4px;}
+  .sec-head .e{font-size:26px;line-height:1;}
+  .sec-head .t{font-size:18px;font-weight:900;}
+  .sec-head .s{font-size:11px;color:var(--sub);margin-top:1px;}
+
+  /* 任务卡（与扣分页同款图文卡，.gcard 定义见 grid 区） */
+
+  /* section title */
+  .sec-title{display:flex;align-items:center;gap:8px;padding:14px 12px 8px;font-size:16px;font-weight:900;}
+  .sec-title .dot{width:10px;height:10px;border-radius:4px;}
+
+  /* grid cards */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:0 12px 12px;}
+  .gcard{background:var(--card);border-radius:18px;padding:12px 10px;box-shadow:0 2px 8px rgba(0,0,0,.04);display:flex;flex-direction:column;gap:6px;min-height:100px;cursor:pointer;transition:transform .1s;}
+  .gcard:active{transform:scale(.97);}
+  .gcard .e{font-size:34px;text-align:center;}
+  .gcard .n{font-size:13px;font-weight:800;line-height:1.25;}
+  .gcard .tag{font-size:11px;font-weight:800;color:var(--green);background:#DCFCE7;padding:3px 8px;border-radius:999px;align-self:flex-start;}
+.gcard .tag.red{color:var(--red);background:#FEE2E2;}
+.gcard .tag.blue{color:#1D4ED8;background:#DBEAFE;}
+.gcard .tag.gray{color:#6B7280;background:#F3F4F6;}
+.gcard.faded{opacity:.55;}
+.gcard .hint{font-size:10px;color:var(--sub);line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+
+  /* views */
+  .view{display:none;padding-bottom:20px;}
+  .view.on{display:block;}
+
+  /* kid view */
+  .kid-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 12px;margin-top:10px;}
+  .kstat{background:#fff;border-radius:16px;padding:10px 4px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .kstat .v{font-size:20px;font-weight:900;}
+  .kstat .l{font-size:11px;color:var(--sub);margin-top:2px;}
+  .flame-box{background:#fff;border-radius:18px;padding:14px;margin:12px 12px 0;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .flame-box .t{font-size:13px;font-weight:800;color:var(--red);}
+  .flame-box .stars{font-size:28px;letter-spacing:2px;margin-top:6px;}
+  .goal-list{padding:0 12px;}
+  .goal-card{background:#fff;border-radius:16px;padding:12px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .goal-card .row{display:flex;align-items:center;gap:8px;}
+  .goal-card .nm{flex:1;font-size:14px;font-weight:800;}
+  .goal-card .cost{font-size:13px;font-weight:800;color:#16A34A;}
+  .goal-card .bar{height:8px;background:#E5E7EB;border-radius:999px;overflow:hidden;margin-top:8px;}
+  .goal-card .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--orange));border-radius:999px;}
+  .goal-card .btn{width:100%;margin-top:10px;padding:10px;border:none;border-radius:12px;background:var(--blue);color:#fff;font-size:14px;font-weight:800;}
+  .goal-card .btn:disabled{opacity:.5;background:#9CA3AF;}
+
+  /* list view */
+  .list{padding:0 12px;}
+  .rec{background:#fff;border-radius:16px;padding:12px 14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .rec .t{font-size:14px;font-weight:800;}
+  .rec .d{font-size:12px;color:var(--sub);margin-top:3px;}
+  .rec .op{font-size:11px;color:var(--sub);margin-top:4px;}
+  .rec .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin-top:6px;font-weight:700;}
+  .tag.add{background:#DCFCE7;color:#15803D;}
+  .tag.sub{background:#FEE2E2;color:#B91C1C;}
+  .tag.pending{background:#FEF9C3;color:#A16207;}
+  .rec .mini{margin-top:8px;display:flex;gap:8px;}
+  .rec .mini button{flex:1;padding:8px;border:none;border-radius:10px;font-size:13px;font-weight:800;}
+  .mini.ok{background:#DCFCE7;color:#15803D;}
+  .mini.no{background:#FEE2E2;color:#B91C1C;}
+
+  /* admin */
+  .admin-card{background:#fff;border-radius:18px;padding:14px;margin:10px 12px;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .admin-card h4{margin:0 0 8px;font-size:15px;font-weight:900;}
+  .admin-card p{margin:0 0 10px;font-size:12px;color:var(--sub);line-height:1.4;}
+  .admin-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line);}
+  .admin-row:last-child{border-bottom:none;}
+  .admin-row .nm{flex:1;font-size:13px;font-weight:700;}
+  .admin-row button{padding:6px 10px;border-radius:10px;border:none;font-size:12px;font-weight:800;}
+
+  /* guide */
+  .guide-card{background:#fff;border-radius:20px;padding:16px;margin:12px 12px 0;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .guide-card h3{margin:0 0 10px;font-size:16px;color:#92400E;}
+  .guide-card p{margin:0 0 10px;font-size:13px;line-height:1.6;color:#5D4037;}
+  .guide-card .num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#FCD34D;color:#78350F;font-size:12px;font-weight:900;margin-right:6px;}
+
+  /* reminders */
+  .remind-box{background:#FFFBEB;border:1px solid #FDE68A;border-radius:16px;padding:12px 14px;margin:0 12px 12px;}
+  .remind-box h4{margin:0 0 8px;font-size:14px;color:#92400E;}
+  .remind-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed #FDE68A;}
+  .remind-item:last-child{border-bottom:none;}
+  .remind-item .nm{flex:1;font-size:13px;font-weight:700;}
+  .remind-item button{padding:6px 10px;border:none;border-radius:8px;font-size:12px;font-weight:800;background:#F59E0B;color:#fff;}
+
+  /* filter tabs */
+  .filter-tabs{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .filter-tab{flex:0 0 auto;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:12px;font-weight:800;color:var(--sub);}
+  .filter-tab.on{background:#FEF3C7;color:#B45309;border-color:#FCD34D;}
+
+  /* rules */
+  .rule-card{background:#fff;border-radius:16px;padding:14px;margin:0 12px 10px;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .rule-card h4{margin:0 0 8px;font-size:15px;font-weight:900;}
+  .rule-item{padding:8px 0;border-bottom:1px dashed var(--line);}
+  .rule-item:last-child{border-bottom:none;}
+  .rule-item .nm{font-size:14px;font-weight:800;}
+  .rule-item .meta{font-size:11px;color:var(--sub);margin-top:2px;}
+  .rule-item .desc{font-size:12px;color:#5D4037;margin-top:2px;line-height:1.4;}
+
+  /* nav */
+  .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:66px;background:#fff;border-top:1px solid var(--line);display:flex;z-index:40;}
+  .nav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:9px;color:var(--sub);text-decoration:none;}
+  .nav a.on{color:var(--gold);font-weight:800;}
+  .nav .ic{font-size:20px;line-height:1;}
+
+  /* masks/sheets */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:none;align-items:flex-end;justify-content:center;}
+  .mask.on{display:flex;}
+  .sheet{width:100%;max-width:480px;background:#fff;border-radius:24px 24px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto;}
+  .sheet h3{margin:0 0 4px;font-size:18px;}
+  .sheet .desc{font-size:12px;color:var(--sub);margin-bottom:14px;line-height:1.4;}
+  .sheet .actions{display:flex;gap:10px;margin-top:10px;}
+  .sheet .actions button{flex:1;padding:13px;border:none;border-radius:14px;font-size:15px;font-weight:800;}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-ghost{background:#F1F5F9;color:var(--ink);}
+  .btn-red{background:#DC2626;color:#fff;}
+  .btn-gold{background:linear-gradient(135deg,#FBBF24,#F59E0B);color:#3E2723;}
+
+  /* options */
+  .opts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+  .opts button{flex:1;min-width:80px;padding:12px 6px;border:2px solid var(--line);border-radius:14px;background:#fff;font-size:14px;font-weight:800;color:var(--ink);}
+  .opts button.sel{border-color:var(--blue);background:#EFF6FF;color:var(--blue);}
+  .subrow{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .subrow .sl{font-size:13px;font-weight:700;flex:1;}
+  .subrow .sopts button{padding:8px 12px;border:2px solid var(--line);border-radius:10px;background:#fff;font-size:13px;font-weight:800;}
+  .subrow .sopts button.sel{border-color:var(--orange);background:#FFF7ED;color:var(--orange);}
+  .ropebox{background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:12px;margin-bottom:12px;}
+  .ropebox .ri{display:flex;align-items:center;gap:8px;margin:6px 0;}
+  .ropebox .ri label{font-size:13px;font-weight:700;flex:1;}
+  .ropebox .ri input{width:110px;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:14px;text-align:center;}
+  .qty{display:flex;align-items:center;gap:14px;margin:10px 0;}
+  .qty button{width:40px;height:40px;border-radius:12px;border:2px solid var(--line);background:#fff;font-size:20px;font-weight:800;}
+  .qty .n{font-size:22px;font-weight:900;min-width:34px;text-align:center;}
+  .field{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px;font-size:14px;margin-bottom:10px;resize:vertical;}
+  .field:focus{outline:none;border-color:var(--blue);}
+
+  /* login */
+  .login{position:fixed;inset:0;background:linear-gradient(160deg,#F59E0B,#EF4444);z-index:70;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login .box{background:#fff;border-radius:28px;padding:24px 20px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .login h2{margin:0 0 4px;text-align:center;font-size:22px;}
+  .login .sub{text-align:center;color:var(--sub);font-size:13px;margin-bottom:18px;}
+  .accts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .accts button{padding:14px 6px;border:2px solid var(--line);border-radius:16px;background:#fff;font-size:15px;font-weight:800;display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .accts button .r{font-size:10px;color:var(--sub);font-weight:600;}
+  .accts button.on{border-color:var(--gold);background:#FFFBEB;}
+  .pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 14px;}
+  .pinpad button{padding:16px;border:1px solid var(--line);border-radius:14px;background:#F8FAFC;font-size:20px;font-weight:800;}
+  .pinpad .del{color:var(--red);}
+  .pinshow{display:flex;justify-content:center;gap:10px;margin:8px 0 4px;}
+  .pinshow i{width:12px;height:12px;border-radius:50%;background:#E5E7EB;}
+  .pinshow i.on{background:var(--gold);}
+  .login .go{width:100%;padding:14px;border:none;border-radius:14px;background:var(--gold);color:#3E2723;font-size:16px;font-weight:900;}
+  .login .hint{text-align:center;font-size:11px;color:var(--sub);margin-top:12px;line-height:1.5;}
+
+  /* animations */
+  @keyframes pop{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.15);}100%{transform:scale(1);opacity:1;}}
+  .pop{animation:pop .35s ease;}
+  @keyframes sparkle{0%{transform:translateY(0) scale(1);opacity:1;}100%{transform:translateY(-40px) scale(0);opacity:0;}}
+  .sparkle{position:fixed;font-size:20px;pointer-events:none;animation:sparkle .8s ease-out forwards;z-index:100;}
+  .empty{text-align:center;color:var(--sub);padding:30px 12px;font-size:13px;}
+  .hidden{display:none!important;}
+  .banner{position:fixed;top:0;left:0;right:0;z-index:90;background:#DC2626;color:#fff;font-size:13px;padding:8px 14px;text-align:center;}
+  .toast{position:fixed;left:50%;top:32%;transform:translateX(-50%);background:rgba(31,41,55,.92);color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;z-index:80;opacity:0;transition:.25s;pointer-events:none;max-width:80%;text-align:center;}
+  .toast.on{opacity:1;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="logo">🏝️ 椰子小超人银行</div>
+    <div class="spacer"></div>
+    <span class="modechip local" id="modeChip">本地模式</span>
+    <button class="top-btn" id="refreshBtn" onclick="doRefresh()" title="刷新同步">🔄</button>
+    <div class="rolechip" id="roleChip" onclick="openMenu()">—</div>
+    <button class="top-btn" onclick="logout()">退出</button>
+  </div>
+
+  <div class="view" id="view-score"></div>
+  <div class="view" id="view-deduct"></div>
+  <div class="view" id="view-exchange"></div>
+  <div class="view" id="view-records"></div>
+  <div class="view" id="view-kid"></div>
+  <div class="view" id="view-admin"></div>
+  <div class="view" id="view-guide"></div>
+  <div class="view" id="view-rules"></div>
+
+  <div class="nav" id="nav">
+    <a data-v="score" onclick="navTo('score')"><span class="ic">☀️</span>加分</a>
+    <a data-v="deduct" onclick="navTo('deduct')"><span class="ic">💧</span>扣分</a>
+    <a data-v="exchange" onclick="navTo('exchange')"><span class="ic">🎁</span>兑换</a>
+    <a data-v="records" onclick="navTo('records')"><span class="ic">📜</span>记录</a>
+    <a data-v="kid" onclick="navTo('kid')"><span class="ic">🦸</span>宝宝</a>
+    <a data-v="rules" onclick="navTo('rules')"><span class="ic">📋</span>规则</a>
+    <a data-v="admin" id="navAdmin" onclick="navTo('admin')" class="hidden"><span class="ic">⚙️</span>管理</a>
+  </div>
+</div>
+
+<!-- detail modal -->
+<div class="mask" id="detailMask" onclick="closeDetail(event)">
+  <div class="sheet">
+    <h3 id="detName"></h3>
+    <div class="desc" id="detDesc"></div>
+    <div id="detBody"></div>
+    <div class="actions" id="detActions"></div>
+  </div>
+</div>
+
+<!-- score sheet -->
+<div class="mask" id="scoreMask" onclick="closeSheet(event)">
+  <div class="sheet">
+    <h3 id="ssName"></h3>
+    <div class="desc" id="ssDesc"></div>
+    <div class="opts" id="ssOpt"></div>
+    <div id="ssSubs"></div>
+    <div class="ropebox hidden" id="ssRope">
+      <div class="ri"><label>单次连续最高数量</label><input id="ssRopeCont" type="number" inputmode="numeric" placeholder="如 138"></div>
+      <div class="ri"><label>1 分钟最高数量</label><input id="ssRopeOne" type="number" inputmode="numeric" placeholder="如 120"></div>
+      <div class="hint" id="ssRopeHint"></div>
+    </div>
+    <div class="qty hidden" id="ssQty">
+      <span style="font-size:13px;color:var(--sub);">数量：</span>
+      <button onclick="chgQty(-1)">−</button>
+      <span class="n" id="ssQtyN">1</span>
+      <button onclick="chgQty(1)">＋</button>
+      <span id="ssQtyHint" style="font-size:11px;color:var(--sub);"></span>
+    </div>
+    <input class="field" id="ssReason" placeholder="">
+    <div class="actions">
+      <button class="btn-ghost" onclick="closeSheet()">取消</button>
+      <button class="btn-primary" id="ssSubmit" onclick="submitScore()">确认提交</button>
+    </div>
+  </div>
+</div>
+
+<!-- exchange sheet -->
+<div class="mask" id="exMask" onclick="closeSheet(event)">
+  <div class="sheet">
+    <h3 id="exName"></h3>
+    <div class="desc">需要 <b id="exCost"></b> 积分，当前可用 <b id="exBalance"></b> 积分</div>
+    <input class="field" id="exReason" placeholder="想换这个奖励的原因（必填，孩子可以口述）">
+    <div class="actions">
+      <button class="btn-ghost" onclick="closeSheet()">取消</button>
+      <button class="btn-gold" id="exSubmit" onclick="submitExchange()">确认申请</button>
+    </div>
+  </div>
+</div>
+
+<!-- deduct sheet -->
+<div class="mask" id="deductMask" onclick="closeSheet(event)">
+  <div class="sheet">
+    <h3 id="deductName"></h3>
+    <div class="desc">扣 <b id="deductScore"></b> 分；请认真填写原因</div>
+    <input class="field" id="deductReason" placeholder="发生了什么？（必填，越具体越好）">
+    <div class="actions">
+      <button class="btn-ghost" onclick="closeSheet()">取消</button>
+      <button class="btn-red" id="deductSubmit" onclick="submitDeduct()">提交扣分</button>
+    </div>
+  </div>
+</div>
+
+<!-- menu -->
+<div class="mask" id="menuMask" onclick="closeSheet(event)">
+  <div class="sheet" style="text-align:center;">
+    <h3 id="menuName">—</h3>
+    <div class="desc" id="menuRole">—</div>
+    <button class="btn-ghost" style="width:100%;padding:13px;border:none;border-radius:14px;font-size:15px;font-weight:800;background:#F1F5F9;" onclick="logout()">退出登录 / 切换账号</button>
+  </div>
+</div>
+
+<!-- login -->
+<div class="login" id="login" style="display:flex;">
+  <div class="box">
+    <h2>🏦 小宇的积分银行</h2>
+    <div class="sub">做好事赚金币 · 存金币换心愿</div>
+    <div class="accts" id="acctGrid"></div>
+    <div class="pinshow" id="pinShow"><i></i><i></i><i></i><i></i></div>
+    <div class="pinpad" id="pinPad"></div>
+    <button class="go" onclick="doLogin()">登 录</button>
+    <div class="hint">默认密码：妈妈/爸爸 0000 · 外公/外婆 1111 · 爷爷/奶奶 2222 · 宝宝 3333<br>微信绑定为后续部署步骤；当前直接打开为本地模式，运行 server.js 可全家联网</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ 内置默认规则（离线本地模式使用，与 server.js 一致） ============ */
+const EMBED_RULES = {
+  dim: [
+    { key: '学习', name: '学习小达人', color: '#3B82F6', type: '习惯' },
+    { key: '运动', name: '运动小健将', color: '#F97316', type: '习惯' },
+    { key: '家务', name: '家务小帮手', color: '#22C55E', type: '习惯' },
+    { key: '自理', name: '自理小能手', color: '#EAB308', type: '习惯' },
+    { key: '品格', name: '品格小君子', color: '#A855F7', type: '习惯' },
+    { key: '勇气', name: '勇气小超人', color: '#EF4444', type: '品质' },
+  ],
+  items: [
+    // 学习
+    { dim:'学习',name:'完成作业',score:'2',mode:'固定',freq:'每日1次',op:'爸妈/外公外婆',desc:'孩子记不住作业，家长告知后完成',eg:'今天独立完成口算作业' },
+    { dim:'学习',name:'作业不拖拉',score:'0~2',mode:'质量',freq:'每日1次',op:'爸妈/外公外婆',desc:'20分钟内自开始=2｜催1次=1｜催2次+=0',opts:[['按时(20分钟内自开始)',2],['催1次',1],['催2次以上',0]],eg:'20分钟内自己开始写，没催' },
+    { dim:'学习',name:'自主订正（只说有错，自己找出）',score:'3',mode:'固定',freq:'每日1次',op:'爸妈/外公外婆',desc:'未指位置才算自主；前两周给范围提示仍算',eg:'自己找出错字并改正' },
+    { dim:'学习',name:'按要求订正（指出具体错误后改）',score:'1',mode:'固定',freq:'每日1次',op:'爸妈/外公外婆',desc:'与上式不重复，取高者',eg:'老师说第3题错了，我改对' },
+    { dim:'学习',name:'算术 1 页',score:'1',mode:'固定',freq:'可累计·日上限2页',op:'爸妈/外公外婆',eg:'完成算术1页' },
+    { dim:'学习',name:'练字 1 页',score:'1',mode:'固定',freq:'可累计·日上限2页',op:'爸妈/外公外婆',eg:'练字1页' },
+    { dim:'学习',name:'英语单词 4 个',score:'2',mode:'固定',freq:'可累计·日上限2组',op:'爸妈/外公外婆',eg:'背会4个新单词 apple/book/cat/dog' },
+    { dim:'学习',name:'古诗 1 首（背/复习）',score:'2',mode:'固定',freq:'可累计·日上限2首',op:'爸妈/外公外婆',eg:'背诵《静夜思》' },
+    { dim:'学习',name:'课外阅读 20 分钟',score:'3',mode:'固定',freq:'每日1次',op:'爸妈',eg:'读了20分钟绘本' },
+    { dim:'学习',name:'主动讲解知识/教别人',score:'2',mode:'固定',freq:'每日1次',op:'爸妈/外公外婆',eg:'给爸爸讲恐龙知识' },
+    { dim:'学习',name:'复习/预习 15 分钟',score:'2',mode:'固定',freq:'每日1次',op:'爸妈/外公外婆',eg:'预习了明天课文' },
+    // 运动
+// 运动
+    { dim:'运动',name:'跳绳不间断 6 分钟',score:'2~4',mode:'特殊',special:'rope',floor:2,freq:'可累计',op:'爸妈/长辈',desc:'完成6分钟=保底2分；备注两项数量，每项≥上次+1分（最高4分）',eg:'跳绳138个，超过上次' },
+    { dim:'运动',name:'篮球练习（每组15分钟）',score:'2',mode:'固定',freq:'可累计·日上限2组',op:'长辈',eg:'拍球15分钟 / 运球15分钟' },
+    { dim:'运动',name:'篮球训练质量（陪同家长观察打分）',score:'0~5',mode:'复合',freq:'每课1次',op:'陪同家长',desc:'三项分别计分求和：听讲解不分心、队列训练认真、主动观察模仿练习',subs:[{ label:'听讲解不分心',opts:[0,1,2] },{ label:'队列训练认真',opts:[0,1,2] },{ label:'主动观察模仿练习',opts:[0,1] }],eg:'听课不闲聊，主动看教练示范' },
+    { dim:'运动',name:'亲子跑步（每500米得1分）',score:'1',mode:'固定',freq:'可累计·日上限10组',op:'爸妈/长辈',desc:'每500米得1分；填完成组数（1组=500米）',eg:'绕小区跑2组=1000米=2分' },
+    { dim:'运动',name:'亲子骑车（每1公里得1分）',score:'1',mode:'固定',freq:'可累计·日上限10组',op:'爸妈/长辈',desc:'每1公里得1分；填完成公里数',eg:'骑了3公里=3分' },
+    { dim:'运动',name:'轮滑练习（每组15分钟）',score:'2',mode:'固定',freq:'可累计·日上限2组',op:'长辈',eg:'轮滑15分钟' },
+    { dim:'运动',name:'平板撑（循序渐进·完成2组）',score:'1',mode:'固定',freq:'每日1次',op:'爸妈/长辈',desc:'按循序渐进时间长度完成2组（目前每组约1分半）',eg:'坚持1分半×2组' },
+    { dim:'运动',name:'运动三项小标兵（跑步+跳绳+平板撑全做）',score:'1',mode:'固定',freq:'每日1次',op:'爸妈',desc:'当天跑步、跳绳、平板撑都完成，额外+1分（由家长确认三项均做到后申报）',eg:'今日三项运动全做到' },
+
+    // 家务
+    { dim:'家务',name:'整理书桌',score:'1',mode:'固定',freq:'每日1次',op:'爸妈/长辈',eg:'书桌收拾干净' },
+    { dim:'家务',name:'收拾玩具/书籍，保持整洁',score:'2',mode:'固定',freq:'可累计·日上限2次',op:'爸妈/长辈',eg:'积木归位、绘本放回书架' },
+    { dim:'家务',name:'摆收碗筷（仅自己）',score:'1',mode:'固定',freq:'每餐1次',op:'爸妈/长辈',eg:'吃完自己收碗' },
+    { dim:'家务',name:'擦餐桌',score:'1',mode:'固定',freq:'每餐1次',op:'爸妈/长辈',eg:'擦干净餐桌' },
+    { dim:'家务',name:'洗碗/洗自己的碗',score:'2',mode:'固定',freq:'每日1次',op:'爸妈/长辈',eg:'吃完自己把碗洗干净' },
+    { dim:'家务',name:'扫地或擦地一个区域',score:'2',mode:'固定',freq:'每日1次',op:'爸妈/长辈',eg:'扫一块地或擦一块地' },
+    { dim:'家务',name:'晾/收衣服',score:'2',mode:'固定',freq:'每日1次',op:'爸妈/长辈',eg:'帮忙晾衣服或收叠干衣' },
+    { dim:'家务',name:'把衣服整齐收入衣柜',score:'3',mode:'固定',freq:'每日1次',op:'爸妈/长辈',desc:'稳定后降至2（衰减）',eg:'把叠好的衣服整齐放进衣柜' },
+    { dim:'家务',name:'铺床',score:'2',mode:'固定',freq:'每日1次',op:'爸妈/长辈',eg:'铺好被子' },
+    { dim:'家务',name:'出门主动带垃圾',score:'2',mode:'固定',freq:'可累计·日上限2次',op:'爸妈/长辈',eg:'出门顺手带垃圾下楼' },
+    { dim:'家务',name:'取快递',score:'2',mode:'固定',freq:'可累计·日上限2次',op:'爸妈/长辈',eg:'下楼取了快递' },
+    // 自理
+    { dim:'自理',name:'闹钟响后自己下床',score:'0~2',mode:'质量',freq:'每日1次',op:'爸妈',desc:'自己起=2｜叫1次=1｜叫2次+=0',opts:[['自己起',2],['叫1次',1],['叫2次以上',0]],eg:'闹钟响自己起床' },
+    { dim:'自理',name:'自己穿好衣服',score:'1',mode:'固定',freq:'每日1次',op:'爸妈',eg:'自己穿好衣服' },
+    { dim:'自理',name:'独立洗漱',score:'1',mode:'固定',freq:'每日1次',op:'爸妈',eg:'自己刷牙洗脸' },
+    { dim:'自理',name:'早餐不拖沓',score:'0~2',mode:'质量',freq:'每日1次',op:'爸妈',desc:'15分钟内吃完=2｜催1次=1｜催2次+=0',opts:[['15分钟内吃完',2],['催1次',1],['叫2次以上',0]],eg:'15分钟内吃完早餐' },
+    { dim:'自理',name:'中餐不拖沓',score:'0~2',mode:'质量',freq:'每日1次',op:'爸妈',desc:'30分钟内吃完=2｜催1次=1｜催2次+=0',opts:[['30分钟内吃完',2],['催1次',1],['叫2次以上',0]],eg:'30分钟内吃完中饭' },
+    { dim:'自理',name:'晚餐不拖沓',score:'0~2',mode:'质量',freq:'每日1次',op:'爸妈',desc:'30分钟内吃完=2｜催1次=1｜催2次+=0',opts:[['30分钟内吃完',2],['催1次',1],['叫2次以上',0]],eg:'30分钟内吃完晚饭' },
+    { dim:'自理',name:'按时上床不拖延',score:'3',mode:'固定',freq:'每日1次',op:'爸妈',eg:'到点主动上床' },
+    { dim:'自理',name:'上床后不反复起身',score:'2',mode:'固定',freq:'每日1次',op:'爸妈',eg:'上床后没起来玩' },
+    { dim:'自理',name:'独立入睡',score:'1~5',mode:'质量',freq:'每日1次',op:'爸妈',desc:'大人在房不陪床=1｜不进房=3｜整晚独立=5',opts:[['大人在房不陪床',1],['不进房',3],['整晚独立',5]],eg:'自己睡整晚没进爸妈房' },
+    { dim:'自理',name:'自己洗澡',score:'2~4',mode:'质量',freq:'每日1次',op:'爸妈',desc:'独立=4｜需协助=2',opts:[['独立洗',4],['需协助',2]],eg:'自己洗完澡' },
+    { dim:'自理',name:'自己擦屁股',score:'1~2',mode:'质量',freq:'可累计',op:'爸妈',desc:'尝试+补擦=1｜独立擦净=2',opts:[['尝试+补擦',1],['独立擦净',2]],eg:'自己擦干净' },
+    { dim:'自理',name:'按课表整理书包',score:'3',mode:'固定',freq:'每日1次',op:'爸妈/长辈',eg:'按课表收好书本' },
+    // 品格
+    { dim:'品格',name:'主动说请/谢谢/对不起',score:'2',mode:'固定',freq:'可累计·日上限3次',op:'爸妈',eg:'主动说谢谢' },
+    { dim:'品格',name:'帮助家人/小朋友（摆全家餐具等）',score:'2',mode:'固定',freq:'可累计·每周上限5次',op:'爸妈/长辈',desc:'主动承担额外任务；递杯子等日常关心不算',eg:'帮摆全家餐具' },
+    { dim:'品格',name:'诚实（主动承认错误）',score:'4',mode:'固定',freq:'可累计',op:'爸妈',eg:'主动承认打翻了水杯' },
+    { dim:'品格',name:'不受同伴影响、守住规则',score:'4',mode:'固定',freq:'可累计',op:'爸妈',eg:'别人吵闹时我守住规矩' },
+    { dim:'品格',name:'小主人·迎接朋友（提醒换鞋、洗手、引导）',score:'1',mode:'固定',freq:'每周1次',op:'爸妈',eg:'朋友来，提醒换鞋洗手并引导玩' },
+    { dim:'品格',name:'小主人·主动分享玩具/书籍/零食',score:'2',mode:'固定',freq:'每周1次',op:'爸妈',eg:'主动把玩具或零食分享给朋友' },
+    { dim:'品格',name:'小主人·遵守约定时间、不超时',score:'2',mode:'固定',freq:'每周1次',op:'爸妈',eg:'到约定时间主动结束游戏' },
+    { dim:'品格',name:'小主人·事后自己收拾场地',score:'2',mode:'固定',freq:'每周1次',op:'爸妈',eg:'朋友走后自己收拾玩具和场地' },
+    // 勇气品质层
+    { dim:'勇气',name:'抗挫坚持（遇挫不放弃、继续尝试）',score:'3~5',mode:'质量',freq:'可累计·日上限2次',op:'爸妈',desc:'英语配音练到满意｜跳绳快速续上｜积木卡住继续',opts:[['坚持完成',3],['较难坚持下来',4],['多次想放弃仍完成',5]],eg:'配音没满分仍练到满意' },
+    { dim:'勇气',name:'控制情绪、不发脾气（语言代替哭闹）',score:'3',mode:'固定',freq:'每日1次',op:'爸妈',desc:'发脾气时不加分+事后复盘；仅攻击行为走扣分',eg:'想买玩具没买，没哭闹' },
+    { dim:'勇气',name:'主动表达/社交勇气',score:'3~5',mode:'质量',freq:'日上限2次',op:'爸妈',desc:'超市问路5｜餐厅点单4｜打招呼/表演3',opts:[['主动问路/办事',5],['主动点单',4],['主动打招呼/表演',3]],eg:'在超市主动问阿姨商品在哪' },
+    { dim:'勇气',name:'学校举手/朗读/竞选',score:'4',mode:'固定',freq:'每周上限2次',op:'爸妈',desc:'避免与学校积分重复；每周与老师沟通佐证',eg:'课堂上举手朗读' },
+
+  ],
+  deduct: [
+    { name:'打人/说脏话等不文明行为', score:-5, icon:'✋', desc:'动手或说脏话，伤害别人' },
+    { name:'说谎', score:-5, icon:'🙊', desc:'被确认的说谎行为' },
+    { name:'危险行为（如马路乱跑）', score:-5, icon:'⚠️', desc:'危及自身或他人安全的行为' },
+    { name:'故意破坏他人/公共物品', score:-3, icon:'💔', desc:'故意损坏东西' },
+    { name:'未按约定执行（到时未关电视/未回家等）', score:-3, icon:'📺', desc:'已经约定好、提醒后仍不执行' },
+  ],
+  exchange: [
+    { tier:'小兑换（日常）', items:[
+      { name:'指定明晚 1 道菜', cost:5 },
+      { name:'多 15 分钟玩具时间', cost:5 },
+      { name:'优质内容时间 20 分钟', cost:8 },
+      { name:'自选动画时间 15 分钟（每周≤3次）', cost:15 },
+      { name:'倾听券（先不批评，听他说完）', cost:10 },
+      { name:'免责沟通券（小错改一起想办法）', cost:12 },
+      { name:'现金 1~5 元（5分/元）', cost:5 },
+      { name:'周末睡前多 1 个故事（延后15分）', cost:10 },
+      { name:'指定家人陪入睡', cost:8 },
+      { name:'指定家人陪整晚', cost:15 },
+    ] },
+    { tier:'中兑换（周目标）', items:[
+      { name:'延长户外玩耍 30 分钟（基线外）', cost:20 },
+      { name:'邀请朋友来家玩 30 分钟', cost:25 },
+      { name:'决定一次家庭小安排（免费/低成本）', cost:30 },
+    ] },
+    { tier:'大兑换（月目标）', items:[
+      { name:'邀请朋友来家玩 2 小时', cost:60 },
+      { name:'爸妈专属陪伴日（半天·孩子主导）', cost:80 },
+      { name:'现金包 20 元', cost:100 },
+      { name:'现金包 50 元', cost:250 },
+    ] },
+  ],
+};
+const EMBED_ACCOUNTS = [
+  { id:'mama', name:'妈妈', role:'admin', pin:'0000', canDeclare:true },
+  { id:'baba', name:'爸爸', role:'admin', pin:'0000', canDeclare:true },
+  { id:'waigong', name:'外公', role:'elder', pin:'1111', directDims:['学习'], canDeclare:true },
+  { id:'waipo', name:'外婆', role:'elder', pin:'1111', directDims:['学习'], canDeclare:true },
+  { id:'yeye', name:'爷爷', role:'elder', pin:'2222', directDims:[], canDeclare:true },
+  { id:'nainai', name:'奶奶', role:'elder', pin:'2222', directDims:[], canDeclare:true },
+  { id:'baobao', name:'宝宝', role:'kid', pin:'3333', canDeclare:false },
+];
+
+let RULES = EMBED_RULES;
+let ACCOUNTS = EMBED_ACCOUNTS.slice();
+let ME = null;
+let STATE = null;
+let MODE = 'local';
+let loginSel = null, loginPin = '';
+let curDim = '学习';
+let recFilter = '全部';
+let rulesTab = '家长须知';
+const LS_STATE = 'sb_state', LS_ACCT = 'sb_accounts', LS_USER = 'sb_user';
+
+/* ============ emoji mapping ============ */
+function emoFor(name){
+  if(name.includes('作业'))return '📝'; if(name.includes('阅读'))return '📚'; if(name.includes('古诗'))return '📜';
+  if(name.includes('算术')||name.includes('口算'))return '🔢'; if(name.includes('练字'))return '✍️'; if(name.includes('英语'))return '🔤';
+  if(name.includes('复习')||name.includes('预习'))return '📖'; if(name.includes('跳绳'))return '🏃';
+  if(name.includes('篮球'))return '🏀'; if(name.includes('户外')||name.includes('跑'))return '🌳'; if(name.includes('轮滑'))return '🛼';
+  if(name.includes('书包'))return '🎒'; if(name.includes('书桌')||name.includes('玩具'))return '🧸';
+  if(name.includes('碗筷')||name.includes('餐桌')||name.includes('垃圾'))return '🍽️'; if(name.includes('快递'))return '📦';
+  if(name.includes('起床')||name.includes('床'))return '🛏️'; if(name.includes('衣服')||name.includes('穿衣'))return '👕';
+  if(name.includes('洗漱')||name.includes('刷牙')||name.includes('洗脸'))return '🪥'; if(name.includes('洗澡'))return '🛁';
+  if(name.includes('早餐')||name.includes('中餐')||name.includes('晚餐'))return '🍚';
+  if(name.includes('擦屁股')||name.includes('厕所'))return '🚽'; if(name.includes('入睡')||name.includes('睡觉'))return '🌙';
+  if(name.includes('请')||name.includes('谢谢'))return '🙏'; if(name.includes('帮助'))return '🤝'; if(name.includes('诚实'))return '💛';
+  if(name.includes('规则'))return '🛡️'; if(name.includes('小主人')||name.includes('朋友'))return '🎉';
+  if(name.includes('抗挫')||name.includes('坚持'))return '💪'; if(name.includes('情绪')||name.includes('脾气'))return '🧘';
+  if(name.includes('社交')||name.includes('表达')||name.includes('问路')||name.includes('点单'))return '🗣️';
+  if(name.includes('学校')||name.includes('举手'))return '🙋'; return '⭐';
+}
+
+/* ============ 本地存储（离线模式） ============ */
+const Local = {
+  loadState(){ try { const s=JSON.parse(localStorage.getItem(LS_STATE)) || this.defaultState(); if(!Array.isArray(s.reminders)) s.reminders=[]; if(s.points && ('日常好习惯' in s.points)){ const pts={}; EMBED_RULES.dim.forEach(d=>pts[d.key]=0); for(const r of (s.records||[])){ if(r.status!=='confirmed') continue; const it=EMBED_RULES.items.find(i=>i.name===r.item); if(it&&pts[it.dim]!==undefined) pts[it.dim]+= (r.type==='sub'? -Math.abs(r.score): r.score); } s.points=pts; this.saveState(s); } return s; } catch(e){ return this.defaultState(); } },
+  saveState(s){ localStorage.setItem(LS_STATE, JSON.stringify(s)); },
+  loadAccts(){ try { return JSON.parse(localStorage.getItem(LS_ACCT)) || null; } catch(e){ return null; } },
+  saveAccts(a){ localStorage.setItem(LS_ACCT, JSON.stringify(a)); },
+  defaultState(){ return { points:{学习:0,运动:0,家务:0,自理:0,品格:0,勇气:0}, total:0, records:[], exchanges:[], reminders:[], carer:'爸妈' }; },
+  parseCap(freq){ if(!freq) return null; let period=null,max=null;
+    if(/每日1次|每餐1次|每课1次/.test(freq)){period='day';max=freq.includes('每餐')?3:1;}
+    if(/日上限(\d+)/.test(freq)){period='day';max=parseInt(freq.match(/日上限(\d+)/)[1],10);}
+    if(/每周(上限)?1次/.test(freq)){period='week';max=1;}
+    if(/每周上限(\d+)/.test(freq)){period='week';max=parseInt(freq.match(/每周上限(\d+)/)[1],10);}
+    return period?{period,max}:null; },
+  usage(state, name, period){ const now=new Date();
+    return state.records.filter(r=>{ if(r.item!==name||r.status==='rejected')return false; const d=new Date(r.ts);
+      if(period==='day')return d.toDateString()===now.toDateString();
+      const wd=x=>{const y=new Date(x);const day=(y.getDay()+6)%7;y.setDate(y.getDate()-day);return y.toDateString();};
+      return wd(d)===wd(now); }).reduce((s,r)=>s+(r.qty||1),0); },
+  usageScore(state, operatorName, period){ const now=new Date();
+    return state.records.filter(r=>r.type==='add'&&r.status==='confirmed'&&r.operator===operatorName&&r.approver===operatorName&&(()=>{const d=new Date(r.ts); if(period==='day')return d.toDateString()===now.toDateString(); const wd=x=>{const y=new Date(x);const day=(y.getDay()+6)%7;y.setDate(y.getDate()-day);return y.toDateString();}; return wd(d)===wd(now);})()).reduce((s,r)=>s+r.score,0); },
+  computeScore(item, b, state){
+    if(item.special==='rope'){ let s=item.floor||2;
+      const prev=[...state.records].reverse().find(r=>r.item===item.name&&r.status!=='rejected'&&r.remarks);
+      if(prev&&prev.remarks){ if(Number(b.cont)>=Number(prev.remarks.cont))s+=1; if(Number(b.one)>=Number(prev.remarks.one))s+=1; }
+      return Math.min(4,Math.max(item.floor||2,s)); }
+    if(item.mode==='复合'){ const v=(b.subs||[]).map(Number); return item.subs.reduce((s,sub,i)=>s+(v[i]||0),0); }
+    return Math.max(0,parseInt(b.score,10)||0); },
+  handle(path, body){
+    if(path==='/api/login'){ const a=ACCOUNTS.find(x=>x.name===body.name);
+      if(!a||a.pin!==String(body.pin||'')) return {error:'账号或密码错误',_c:401};
+      localStorage.setItem(LS_USER,a.id);
+      return {token:a.id,name:a.name,role:a.role,id:a.id,directDims:a.directDims||[],canDeclare:!!a.canDeclare}; }
+    const acc = ACCOUNTS.find(a=>a.id===ME.id);
+    if(path==='/api/state'){ return this.loadState(); }
+    if(path==='/api/record'){ const st=this.loadState(); const item=RULES.items.find(i=>i.name===body.item);
+      if(!item) return {error:'项目不存在',_c:400};
+      const authorized = acc.role==='admin' || (acc.role==='elder'&&acc.canDeclare) || (acc.role==='elder'&&(acc.directDims||[]).includes(item.dim));
+      if(!authorized) return {error:'当前账号未获申报/加分授权',_c:403};
+      const qty=(item.special==='rope'||item.mode==='复合')?1:Math.max(1,parseInt(body.qty,10)||1);
+      const cap=this.parseCap(item.freq);
+      if(cap){ const used=this.usage(st,item.name,cap.period); if(used+qty>cap.max) return {error:`「${item.name}」${cap.period==='day'?'今日':'本周'}上限 ${cap.max}次，已用 ${used}次`,_c:400}; }
+      const score=this.computeScore(item,body,st); const total=score*qty;
+      const direct=acc.role==='admin'||(acc.role==='elder'&&(acc.directDims||[]).includes(item.dim));
+      if(acc.role==='elder'&&direct){
+        if(total>3) return {error:`外公外婆学习类直接加分单笔不超过 3 分，本次为 ${total} 分`,_c:400};
+        const used=this.usageScore(st,acc.name,'day');
+        if(used+total>6) return {error:`外公外婆学习类直接加分每日累计不超过 6 分，今日已用 ${used} 分`,_c:400};
+      }
+      const rec={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),dim:item.dim,item:item.name,score:total,qty,type:'add',reason:body.reason||'',operator:acc.name,status:direct?'confirmed':'pending',approver:direct?acc.name:'',remarks:item.special==='rope'?{cont:Number(body.cont)||0,one:Number(body.one)||0}:undefined};
+      st.records.unshift(rec); if(direct){st.points[item.dim]+=total;st.total+=total;}
+      st.reminders=st.reminders.filter(rm=>rm.item!==item.name); this.saveState(st);
+      return {ok:true,status:rec.status}; }
+    if(path==='/api/confirm'){ const st=this.loadState(); const r=st.records.find(x=>x.id===body.recId); if(!r)return{error:'记录不存在',_c:404};
+      if(body.approve){ if(r.status!=='confirmed'){ r.status='confirmed'; r.approver=acc.name;
+        if(r.type==='add'){st.points[r.dim]+=r.score;st.total+=r.score;} else if(r.type==='sub'){st.total+=r.score;} } }
+      else { if(r.status!=='rejected'){ r.status='rejected'; r.approver=acc.name; } }
+      this.saveState(st); return {ok:true}; }
+    if(path==='/api/exchange'){ const st=this.loadState(); if(st.total<body.cost)return{error:'积分不足',_c:400};
+      const status=acc.role==='admin'?'approved':'pending';
+      const ex={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),name:body.name,cost:body.cost,applicant:acc.name,status,approver:status==='approved'?acc.name:''};
+      st.total-=body.cost; st.exchanges.unshift(ex); this.saveState(st); return {ok:true,status:ex.status}; }
+    if(path==='/api/exchangeConfirm'){ const st=this.loadState(); const ex=st.exchanges.find(x=>x.id===body.recId); if(!ex)return{error:'兑换记录不存在',_c:404};
+      if(body.approve){ if(ex.status!=='approved'){ ex.status='approved'; ex.approver=acc.name; } }
+      else { if(ex.status!=='rejected'){ ex.status='rejected'; ex.approver=acc.name; st.total+=ex.cost; } }
+      this.saveState(st); return {ok:true}; }
+    if(path==='/api/deduct'){ if(acc.role==='kid')return{error:'仅家长可登记扣分',_c:403};
+      const d=RULES.deduct.find(x=>x.name===body.name); if(!d)return{error:'扣分项不存在',_c:400};
+      if(!body.reason||!body.reason.trim())return{error:'扣分必须填写原因',_c:400};
+      const isAdmin=acc.role==='admin'; const st=this.loadState();
+      const rec={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),dim:'扣分',item:d.name,score:d.score,qty:1,type:'sub',reason:body.reason.trim(),operator:acc.name,status:isAdmin?'confirmed':'pending',approver:isAdmin?acc.name:''};
+      st.records.unshift(rec); if(isAdmin)st.total+=d.score; this.saveState(st); return {ok:true,status:rec.status}; }
+    if(path==='/api/remind'){ const st=this.loadState();
+      st.reminders.unshift({id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),item:body.item,operator:acc.name,status:'pending'});
+      this.saveState(st); return {ok:true}; }
+    if(path==='/api/remindDismiss'){ if(acc.role==='kid')return{error:'仅家长可处理提醒',_c:403};
+      const st=this.loadState(); st.reminders=st.reminders.filter(rm=>rm.id!==body.id); this.saveState(st); return {ok:true}; }
+    if(path==='/api/carer'){ const st=this.loadState(); st.carer=body.carer; this.saveState(st); return {ok:true}; }
+    if(path==='/api/account'){ const t=ACCOUNTS.find(x=>x.id===body.id); if(!t)return{error:'账号不存在',_c:404};
+      if(body.directDims!==undefined)t.directDims=body.directDims; if(body.canDeclare!==undefined)t.canDeclare=!!body.canDeclare; if(body.pin!==undefined)t.pin=String(body.pin);
+      this.saveAccts(ACCOUNTS); return {ok:true,accounts:ACCOUNTS.map(a=>({id:a.id,name:a.name,role:a.role,directDims:a.directDims||[],canDeclare:!!a.canDeclare}))}; }
+    return {error:'接口不存在',_c:404};
+  }
+};
+
+/* ============ API 抽象层 ============ */
+async function call(path, body){
+  if(MODE==='server'){
+    const opt={method:body?'POST':'GET',headers:{'Content-Type':'application/json'}};
+    if(body) opt.body=JSON.stringify(Object.assign({token:ME&&ME.token},body));
+    const r=await fetch(path+(path.includes('?')?'&':'?')+'token='+(ME?ME.token:''),opt);
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error||'请求失败');
+    return d;
+  } else {
+    const res=Local.handle(path, body||{});
+    if(res._c&&res._c>=400){ const e=new Error(res.error); e.resp=res; throw e; }
+    return res;
+  }
+}
+async function fetchState(){
+  if(MODE==='server'){ try{ STATE=await call('/api/state'); }catch(e){} }
+  else STATE=Local.loadState();
+}
+
+/* ============ 启动 ============ */
+(async function init(){
+  try {
+    const ping = await fetch('/api/ping').then(r=>r.json());
+    if(ping.ok && ping.mode==='server'){
+      MODE='server'; RULES=await fetch('/api/rules').then(r=>r.json());
+      ACCOUNTS=ping.accounts.map(a=>({id:a.id,name:a.name,role:a.role,directDims:[],canDeclare:a.canDeclare}));
+    } else throw new Error();
+  } catch(e){
+    MODE='local';
+    const la=Local.loadAccts(); if(la) ACCOUNTS=la; else { ACCOUNTS=EMBED_ACCOUNTS.slice(); Local.saveAccts(ACCOUNTS); }
+    RULES=EMBED_RULES;
+    showBanner('本地模式：数据仅存本机，换设备不共享。想全家同步请运行 server.js。');
+  }
+  document.getElementById('modeChip').textContent = MODE==='server'?'已联网·多端同步':'本地模式·未同步';
+  document.getElementById('modeChip').className = 'modechip '+(MODE==='server'?'server':'local');
+  document.getElementById('refreshBtn').style.display = MODE==='server'?'':'none';
+  openLogin();
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden && ME){ fetchState().then(renderAll); } });
+})();
+
+/* ============ 登录 ============ */
+function openLogin(){
+  document.getElementById('login').style.display='flex';
+  if(MODE==='local'){ const u=localStorage.getItem(LS_USER); if(u) loginSel=u; }
+  renderAcctGrid(); renderPin();
+}
+function renderAcctGrid(){
+  const grid=document.getElementById('acctGrid');
+  grid.innerHTML=ACCOUNTS.map(a=>`<button class="${loginSel===a.id?'on':''}" onclick="selAcct('${a.id}')"><span>${a.name}</span><span class="r">${a.role==='admin'?'管理员':a.role==='kid'?'宝宝':'长辈'}</span></button>`).join('');
+}
+function selAcct(id){ loginSel=id; loginPin=''; renderAcctGrid(); renderPin(); }
+function renderPin(){
+  const pad=document.getElementById('pinPad');
+  if(!pad._built){ const keys=['1','2','3','4','5','6','7','8','9','清空','0','删除'];
+    pad.innerHTML=keys.map(k=>`<button onclick="pinKey('${k}')" class="${k==='删除'?'del':''}">${k}</button>`).join(''); pad._built=true; }
+  const show=document.getElementById('pinShow');
+  show.innerHTML=[0,1,2,3].map(i=>`<i class="${i<loginPin.length?'on':''}"></i>`).join('');
+}
+function pinKey(k){ if(k==='清空')loginPin=''; else if(k==='删除')loginPin=loginPin.slice(0,-1); else if(loginPin.length<4)loginPin+=k; renderPin(); }
+async function doLogin(){
+  if(!loginSel){ toast('请先选择身份'); return; }
+  const acc=ACCOUNTS.find(a=>a.id===loginSel); if(!acc){ toast('请选择身份'); return; }
+  if(loginPin.length<1){ toast('请输入密码'); return; }
+  try{
+    const d=await call('/api/login',{name:acc.name,pin:loginPin});
+    ME={id:d.id,name:d.name,role:d.role,directDims:d.directDims||[],canDeclare:d.canDeclare,token:d.token};
+    await fetchState();
+    document.getElementById('login').style.display='none';
+    afterLogin();
+  }catch(e){ toast(e.message||'登录失败'); }
+}
+function logout(){ localStorage.removeItem(LS_USER); ME=null; STATE=null; document.getElementById('roleChip').textContent='—'; document.getElementById('menuMask').classList.remove('on'); openLogin(); }
+function afterLogin(){
+  document.getElementById('roleChip').textContent=ME.name;
+  document.getElementById('roleChip').className='rolechip'+(ME.role==='admin'?' admin':'');
+  document.getElementById('navAdmin').classList.toggle('hidden', ME.role!=='admin');
+  document.querySelectorAll('.nav a').forEach(a=>a.style.display='');
+  renderAll();
+  if(ME.role==='kid') navTo('kid'); else navTo('score');
+}
+
+/* ============ 权限与上限工具 ============ */
+function canDirect(item){ if(ME.role==='admin')return true; if(ME.role==='elder'&&(ME.directDims||[]).includes(item.dim))return true; return false; }
+function canDeclare(){ return ME.role==='admin' || (ME.role==='elder'&&ME.canDeclare); }
+function parseCap(freq){ if(!freq)return null; let period=null,max=null;
+  if(/每日1次|每餐1次|每课1次/.test(freq)){period='day';max=freq.includes('每餐')?3:1;}
+  if(/日上限(\d+)/.test(freq)){period='day';max=parseInt(freq.match(/日上限(\d+)/)[1],10);}
+  if(/每周(上限)?1次/.test(freq)){period='week';max=1;}
+  if(/每周上限(\d+)/.test(freq)){period='week';max=parseInt(freq.match(/每周上限(\d+)/)[1],10);}
+  return period?{period,max}:null; }
+function capUnit(freq){ const m=freq&&freq.match(/(次|组|页|首)/); return m?m[1]:'次'; }
+function usedOf(item){ if(!STATE)return 0; const cap=parseCap(item.freq); if(!cap)return 0;
+  const now=new Date();
+  return STATE.records.filter(r=>{ if(r.item!==item.name||r.status==='rejected')return false; const d=new Date(r.ts);
+    if(cap.period==='day')return d.toDateString()===now.toDateString();
+    const wd=x=>{const y=new Date(x);const day=(y.getDay()+6)%7;y.setDate(y.getDate()-day);return y.toDateString();};
+    return wd(d)===wd(now); }).reduce((s,r)=>s+(r.qty||1),0); }
+function totalGained(){ let s=0; if(!STATE)return 0; STATE.records.forEach(r=>{if(r.status==='confirmed'&&r.type==='add')s+=r.score;}); return s; }
+function totalDeducted(){ let s=0; if(!STATE)return 0; STATE.records.forEach(r=>{if(r.status==='confirmed'&&r.type==='sub')s+=Math.abs(r.score);}); return s; }
+function totalExchanged(){ let s=0; if(!STATE)return 0; STATE.exchanges.forEach(x=>{if(x.status==='approved')s+=x.cost;}); return s; }
+function totalPendingEx(){ let s=0; if(!STATE)return 0; STATE.exchanges.forEach(x=>{if(x.status==='pending')s+=x.cost;}); return s; }
+function nextReward(){ let all=[]; RULES.exchange.forEach(g=>g.items.forEach(i=>all.push(i))); return all.find(i=>STATE.total<i.cost)||all[all.length-1]||{name:'攒一个大目标',cost:9999}; }
+function exchangeProgress(cost){ return Math.min(100, Math.floor(STATE.total/cost*100)); }
+
+/* ============ 导航 ============ */
+let curView='score';
+async function navTo(v){
+  curView=v;
+  ['score','deduct','exchange','records','kid','admin','guide','rules'].forEach(x=>{const el=document.getElementById('view-'+x); if(el) el.classList.toggle('on',x===v);});
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
+  await fetchState();
+  if(v==='score')renderScore(); if(v==='deduct')renderDeduct(); if(v==='exchange')renderExchange();
+  if(v==='records')renderRecords(); if(v==='kid')renderKid(); if(v==='admin')renderAdmin(); if(v==='guide')renderGuide(); if(v==='rules')renderRules();
+}
+async function doRefresh(){ await fetchState(); renderAll(); toast('已刷新'); }
+function renderAll(){ renderScore(); renderDeduct(); renderExchange(); renderRecords(); renderKid(); renderAdmin(); renderGuide(); renderRules(); }
+
+/* ============ 加分视图 ============ */
+function dimEmo(key){ return ({ '学习':'📘','运动':'🏀','家务':'🧺','自理':'⏰','品格':'🤝','勇气':'🦸' })[key] || '⭐'; }
+function dimName(d){ return d.name.split(' ').pop(); }
+function renderScore(){
+  const box=document.getElementById('view-score'); if(!STATE)return;
+  // 顶部维度摘要（恢复：仅 图标+分数，无文字）
+  const strip=`<div class="dim-strip">`+RULES.dim.map(d=>{
+    const on=d.key===curDim;
+    return `<div class="dim-card ${on?'on':''}" style="color:${d.color}" onclick="curDim='${d.key}';renderScore()">
+      <div class="e">${dimEmo(d.key)}</div><div class="v">${STATE.points[d.key]||0}</div>
+    </div>`;
+  }).join('')+`</div>`;
+  // 维度标签栏（恢复：胶囊样式，选中深色）
+  const tabs=`<div class="dim-tabs">`+RULES.dim.map(d=>{
+    const on=d.key===curDim;
+    return `<div class="dim-tab ${on?'on':''}" onclick="curDim='${d.key}';renderScore()"><span class="ic">${dimEmo(d.key)}</span><span>${dimName(d)}</span></div>`;
+  }).join('')+`</div>`;
+  const dm=RULES.dim.find(d=>d.key===curDim);
+  const items=RULES.items.filter(i=>i.dim===curDim);
+  const kid=ME.role==='kid';
+  const head=`<div class="sec-head"><span class="e">${dimEmo(dm.key)}</span><div><div class="t">${dimName(dm)}</div><div class="s">${dm.type==='品质'?'品质层 · 鼓励为主 · 非强制':'习惯层 · 计分维度'}</div></div></div>`;
+  // 任务卡：与扣分页一致的图文卡网格
+  const grid=`<div class="grid">`+items.map(it=>{
+    const cap=parseCap(it.freq); const used=usedOf(it); const remain=cap?cap.max-used:Infinity;
+    const full=remain<=0;
+    const noPerm=!canDeclare();
+    const capTxt=cap?`已用 ${used}/${cap.max}${capUnit(it.freq)}`:'';
+    let click, tag, hint;
+    const parts=(...arr)=>arr.filter(Boolean).join(' · ');
+    if(kid){
+      click=`openDetailItem('${it.name}')`;
+      tag=`<span class="tag">+${it.score} 金币</span>`;
+      hint=parts(capTxt, it.desc||it.eg||'点卡片请大人帮你加分');
+    } else if(full){
+      click=`toast('今日已达上限，明天继续加油 💪')`;
+      tag=`<span class="tag gray">今日已达上限</span>`;
+      hint=parts(it.desc, it.eg);
+    } else if(noPerm){
+      click=`toast('当前账号暂无申报权限，请联系管理员开启')`;
+      tag=`<span class="tag gray">暂无申报权限</span>`;
+      hint=parts(it.desc, it.eg);
+    } else {
+      click=`openScoreByName('${it.name}')`;
+      tag=`<span class="tag">+${it.score} 金币</span>`;
+      hint=parts(capTxt, it.freq, it.desc, it.eg);
+    }
+    return `<div class="gcard ${(!kid&&(full||noPerm))?'faded':''}" onclick="${click}">
+      <div class="e">${emoFor(it.name)}</div>
+      <div class="n">${it.name}</div>
+      ${tag}
+      <div class="hint">${hint}</div>
+    </div>`;
+  }).join('')+`</div>`;
+  box.innerHTML=strip+tabs+head+grid;
+}
+
+/* ============ 扣分视图 ============ */
+function renderDeduct(){
+  const box=document.getElementById('view-deduct'); if(!STATE)return;
+  box.innerHTML=`<div class="sec-title"><span class="dot" style="background:#EF4444"></span>温柔提醒 · 扣回少量金币</div>
+    <div class="grid">`+RULES.deduct.map(d=>{
+      return `<div class="gcard" onclick="openDetailDeduct('${d.name}')">
+        <div class="e">${d.icon}</div>
+        <div class="n">${d.name}</div>
+        <span class="tag red">${d.score} 金币</span>
+        <div class="hint">${d.desc}</div>
+      </div>`;
+    }).join('')+`</div>
+    <div class="guide-card" style="margin-top:8px;"><p style="font-size:12px;color:var(--sub);margin:0;">💡 情绪性发脾气不直接扣分；只有攻击/说谎/危险/破坏/违约等行为才走扣分，且需填写具体原因。</p></div>`;
+}
+
+/* ============ 兑换视图 ============ */
+function renderExchange(){
+  const box=document.getElementById('view-exchange'); if(!STATE)return;
+  const reward=nextReward();
+  let html=`<div class="hero">
+    <div class="title">💰 我的金币余额</div>
+    <div class="big">${STATE.total}</div>
+    <div class="sub">离「${reward.name}」还差 ${Math.max(0,reward.cost-STATE.total)} 金币</div>
+    <div class="progress"><i style="width:${exchangeProgress(reward.cost)}%"></i></div>
+    <div class="meta"><span>目标：${reward.name}</span><span>${exchangeProgress(reward.cost)}%</span></div>
+  </div>`;
+  RULES.exchange.forEach(g=>{
+    html+=`<div class="sec-title"><span class="dot" style="background:var(--gold)"></span>${g.tier}</div><div class="goal-list">`;
+    g.items.forEach(it=>{
+      const ok=STATE.total>=it.cost;
+      html+=`<div class="goal-card">
+        <div class="row"><div class="nm">${it.name}</div><div class="cost">${it.cost} 金币</div></div>
+        <div class="bar"><i style="width:${exchangeProgress(it.cost)}%"></i></div>
+        <button class="btn" ${ok?'':'disabled style="opacity:.5;background:#9CA3AF;"'} onclick="openExchange('${it.name}',${it.cost})">我要换</button>
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+  // 兑换记录
+  if(STATE.exchanges && STATE.exchanges.length){
+    html+=`<div class="sec-title"><span class="dot" style="background:var(--gold)"></span>兑换记录</div><div class="list">`+STATE.exchanges.map(x=>{
+      const stxt=x.status==='approved'?'已批准':x.status==='rejected'?'已驳回':'待审批';
+      const scol=x.status==='approved'?'#16A34A':x.status==='rejected'?'#DC2626':'#A16207';
+      return `<div class="rec"><div class="t">🎁 ${x.name} <span style="color:${scol};">${x.cost} 金币</span></div><div class="op">申请人 ${x.applicant} · ${x.ts} · ${stxt}${x.approver?' · 审批：'+x.approver:''}</div></div>`;
+    }).join('')+`</div>`;
+  }
+  box.innerHTML=html;
+}
+
+/* ============ 记录视图 ============ */
+function renderRecords(){
+  const box=document.getElementById('view-records'); if(!STATE)return;
+  const filters=['全部','学习','运动','家务','自理','品格','勇气','扣分','待确认'];
+  let html=`<div class="filter-tabs">`+filters.map(f=>`<div class="filter-tab ${recFilter===f?'on':''}" onclick="recFilter='${f}';renderRecords()">${f}</div>`).join('')+`</div>`;
+  // 宝宝提醒（仅家长可见）
+  if(ME.role!=='kid' && STATE.reminders && STATE.reminders.length){
+    html+=`<div class="remind-box"><h4>🌟 宝宝提醒 · 等你确认</h4>`+STATE.reminders.map(rm=>{
+      return `<div class="remind-item"><span class="ic">${emoFor(rm.item)}</span><div class="nm">${rm.item}</div><div class="op" style="font-size:11px;color:var(--sub);margin-left:auto;padding-right:8px;">${rm.ts}</div><button onclick="openScoreByName('${rm.item.replace(/'/g,"\\'")}')">去加分</button><button style="background:#E5E7EB;color:#374151;margin-left:4px;" onclick="dismissRemind(${rm.id})">忽略</button></div>`;
+    }).join('')+`</div>`;
+  }
+  let list=STATE.records.slice();
+  if(recFilter==='待确认') list=list.filter(r=>r.status==='pending');
+  else if(recFilter!=='全部') list=list.filter(r=>recFilter==='扣分'?r.dim==='扣分':r.dim===recFilter);
+  if(!list.length){ html+='<div class="empty">该分类还没有记录</div>'; box.innerHTML=html; return; }
+  html+='<div class="list">'+list.map(r=>{
+    const tag=r.type==='sub'?'<span class="tag sub">已扣除</span>':r.status==='confirmed'?'<span class="tag add">已确认</span>':r.status==='rejected'?'<span class="tag sub">已驳回</span>':'<span class="tag pending">待确认</span>';
+    const ops=(ME.role==='admin'&&r.status==='pending')?`<div class="mini"><button class="ok" onclick="confirmRec(${r.id})">确认</button><button class="no" onclick="rejectRec(${r.id})">驳回</button></div>`:'';
+    const appr=r.approver?` · 审批：${r.approver}`:''; const qty=(r.qty&&r.qty>1)?` ×${r.qty}`:'';
+    const sc=r.type==='sub'?`<span style="color:#DC2626">${r.score}</span>`:`<span style="color:#16A34A">+${r.score}${qty}</span>`;
+    return `<div class="rec"><div class="t">${emoFor(r.item)} ${r.item} ${sc}</div><div class="d">${r.reason}</div><div class="op">🕒 ${r.ts} · 操作人 ${r.operator} · ${r.dim}${appr}</div>${tag}${ops}</div>`;
+  }).join('')+'</div>';
+  box.innerHTML=html;
+}
+
+/* ============ 孩子视图 ============ */
+function renderKid(){
+  const box=document.getElementById('view-kid'); if(!STATE)return;
+  const gained=totalGained(), lost=totalDeducted(), exchanged=totalExchanged(), pendingEx=totalPendingEx();
+  const flames=Math.min(10,Math.floor((STATE.points['勇气']||0)/3));
+  const reward=nextReward();
+  let html=`<div class="hero">
+    <div class="title">🦸 我是最棒的小超人</div>
+    <div class="big">${STATE.total}</div>
+    <div class="sub">我的成长金币 · 离「${reward.name}」还差 ${Math.max(0,reward.cost-STATE.total)} 金币</div>
+    <div class="progress"><i style="width:${exchangeProgress(reward.cost)}%"></i></div>
+  </div>
+  <div class="kid-stats">
+    <div class="kstat"><div class="v" style="color:#16A34A">${gained}</div><div class="l">累计获得</div></div>
+    <div class="kstat"><div class="v" style="color:#DC2626">${lost}</div><div class="l">累计扣除</div></div>
+    <div class="kstat"><div class="v" style="color:#F59E0B">${exchanged}</div><div class="l">已兑换</div></div>
+  </div>
+  <div class="kid-stats" style="margin-top:8px;">
+    <div class="kstat"><div class="v" style="color:#8B5CF6">${pendingEx}</div><div class="l">待审批预扣</div></div>
+    <div class="kstat" style="grid-column:span 2;"><div class="v" style="color:#6366F1">${STATE.total}</div><div class="l">可用余额</div></div>
+  </div>
+  <div class="flame-box">
+    <div class="t">🔥 勇气火焰星（做到了就点亮，不强求）</div>
+    <div class="stars">${'🔥'.repeat(flames)+'░'.repeat(10-flames)}</div>
+  </div>
+  <div class="sec-title"><span class="dot" style="background:var(--gold)"></span>我想换的奖励</div>
+  <div class="goal-list">`;
+  let all=[]; RULES.exchange.forEach(g=>g.items.forEach(i=>all.push(i)));
+  all.slice(0,5).forEach(it=>{
+    const ok=STATE.total>=it.cost;
+    html+=`<div class="goal-card"><div class="row"><div class="nm">${it.name}</div><div class="cost">${it.cost} 金币</div></div>
+      <div class="bar"><i style="width:${exchangeProgress(it.cost)}%"></i></div>
+      <button class="btn" ${ok?'':'disabled style="opacity:.5;background:#9CA3AF;"'} onclick="openExchange('${it.name}',${it.cost})">我要换</button>
+    </div>`;
+  });
+  html+=`</div><div class="guide-card" style="margin-bottom:20px;"><p style="margin:0;font-size:13px;line-height:1.6;">做完一件好事，可以点开上面的卡片叫大人来帮你加分。金币=累计获得−累计扣除−已兑换−待审批，余额是当前能用的金币。</p></div>`;
+  box.innerHTML=html;
+}
+
+/* ============ 管理视图 ============ */
+function renderAdmin(){
+  const box=document.getElementById('view-admin'); if(!STATE)return;
+  let html=`<div class="admin-card">
+    <h4>👴 长辈申报授权（阶段性）</h4>
+    <p>由管理员决定每位长辈当前是否能申报/加分，应对不同带娃状况；关闭后该长辈将无法提交</p>
+    <div>${ACCOUNTS.filter(a=>a.role==='elder').map(a=>{
+      const on=a.canDeclare;
+      return `<div class="admin-row"><div class="nm">${a.name}</div><button class="${on?'btn-primary':'btn-ghost'}" onclick="toggleDeclare('${a.id}')">${on?'可申报 ✓':'已关闭'}</button></div>`;
+    }).join('')}</div>
+  </div>`;
+  html+=`<div class="admin-card"><h4>👨‍👩‍👦 当前带娃人</h4><p>仅作记录用途</p><div style="display:flex;gap:8px;flex-wrap:wrap;">${['爸妈','外公外婆','爷爷奶奶'].map(c=>`<button class="${STATE.carer===c?'btn-primary':'btn-ghost'}" onclick="setCarer('${c}')">${c}</button>`).join('')}</div></div>`;
+  const pend=STATE.records.filter(r=>r.status==='pending');
+  html+=`<div class="admin-card"><h4>⏳ 待确认申报</h4>`+(pend.length?pend.map(r=>`<div class="rec"><div class="t">${r.item} +${r.score}</div><div class="d">${r.reason}</div><div class="op">${r.operator} · ${r.dim}</div><div class="mini"><button class="ok" onclick="confirmRec(${r.id})">确认</button><button class="no" onclick="rejectRec(${r.id})">驳回</button></div></div>`).join(''):'<p>暂无</p>')+`</div>`;
+  const pe=STATE.exchanges.filter(x=>x.status==='pending');
+  html+=`<div class="admin-card"><h4>🎁 待批准兑换</h4>`+(pe.length?pe.map(x=>`<div class="rec"><div class="t">${x.name}（${x.cost}分）</div><div class="op">申请人 ${x.applicant}</div><div class="mini"><button class="ok" onclick="confirmEx(${x.id})">批准</button><button class="no" onclick="rejectEx(${x.id})">驳回</button></div></div>`).join(''):'<p>暂无</p>')+`</div>`;
+  html+=`<div class="admin-card"><h4>🔐 账号权限</h4><div>${ACCOUNTS.filter(a=>a.role==='elder').map(a=>{
+    const has=(a.directDims||[]).includes('学习');
+    return `<div class="admin-row"><div class="nm">${a.name}</div><button class="${has?'btn-primary':'btn-ghost'}" onclick="toggleDim('${a.id}','学习')">学习直接加分${has?'✓':''}</button><button class="btn-ghost" onclick="resetPin('${a.id}')">重置密码</button></div>`;
+  }).join('')}</div></div>`;
+  if(MODE==='server'){
+    html+=`<div class="admin-card"><h4>💾 数据备份与恢复</h4>
+      <p>服务器会自动每天备份一次（保留最近 7 天）。建议每周点一次「导出备份」，把文件存到手机或电脑里；万一数据丢失，用「导入备份」一键恢复。</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn-primary" onclick="exportData()">⬇️ 导出备份</button>
+        <button class="btn-ghost" onclick="document.getElementById('importFile').click()">⬆️ 导入备份</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)">
+    </div>`;
+  }
+  box.innerHTML=html;
+}
+
+/* ============ 数据备份：导出 / 导入 ============ */
+function stampNow(){ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
+async function exportData(){
+  try{
+    const d=await call('/api/export');
+    const blob=new Blob([JSON.stringify({ exportedAt:d.exportedAt, state:d.state },null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='椰子小超人银行-备份-'+stampNow()+'.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1200);
+    toast('备份文件已下载 ✅');
+  }catch(e){ toast('导出失败：'+e.message); }
+}
+async function importData(input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  try{
+    const txt=await f.text();
+    const j=JSON.parse(txt);
+    const s=(j&&j.state)?j.state:j;
+    if(!s||typeof s.total!=='number'||!Array.isArray(s.records)) throw new Error('这不是本系统的备份文件');
+    if(!confirm('导入会覆盖服务器上的全部数据。\n当前总分：'+STATE.total+' 分\n备份总分：'+s.total+' 分（'+s.records.length+' 条记录）\n确定要恢复这份备份吗？')){ input.value=''; return; }
+    const r=await call('/api/import',{state:s});
+    await fetchState(); renderAll(); renderAdmin();
+    toast('已恢复 ✅ 当前总分 '+r.total+' 分');
+  }catch(e){ toast('导入失败：'+e.message); }
+  input.value='';
+}
+
+/* ============ 家长须知 ============ */
+function guideHTML(){
+  return `<div class="guide-card"><h3>📖 家长须知 · 设计理念</h3>
+    <p><span class="num">1</span><b>正强化为主、扣分为辅：</b>心理学（斯金纳）表明，及时、具体的奖励比惩罚更能塑造行为。加分项远多于扣分项，且扣分项分值小、不带羞辱，目的是「温和提醒」而非惩罚。</p>
+    <p><span class="num">2</span><b>普雷马克原理（祖母法则）：</b>用孩子喜欢的活动（看动画、去公园）去强化不太喜欢的活动（自理、学习）。奖励清单由孩子和大人一起商量定，提升自主感（自我决定理论）。</p>
+    <p><span class="num">3</span><b>小步子 + 高频反馈：</b>7岁孩子需要「够得着」的目标。小奖励（10-20金币）当天就能换，中奖励（30-50）周末可换，大奖励（80-120）需存钱——练延迟满足（棉花糖实验）。</p>
+    <p><span class="num">4</span><b>具体表扬 + 成长型思维：</b>加分时多说「你今天自己整理了书包，真负责！」夸努力和品格，而非「你真聪明」，帮孩子相信能力可练出来（德韦克）。</p>
+    <p><span class="num">5</span><b>稳定可预期：</b>同样的任务每天分值一样，规矩清晰孩子才有安全感；每周可开「家庭小会」微调清单。</p>
+    <p><span class="num">6</span><b>防过度外在奖励：</b>孩子本来就爱的事（如画画）不必给分，保留内在兴趣，避免「过度辩证效应」。</p>
+  </div>
+  <div class="guide-card" style="margin-bottom:20px;">
+    <h3>⚠️ 注意事项与专业边界</h3>
+    <p>• 重过程轻结果；警惕过度外在奖励（配合分值衰减促内化）。</p>
+    <p>• 情绪优先：受挫先共情再引导，绝不此时扣分。</p>
+    <p>• 睡眠优先于拖拉：起床问题先查睡眠总量。</p>
+    <p>• 勇气是礼物不是任务：社交/举手等行为发生时鼓励，不做不施压、不扣分。</p>
+    <p>• ❗ 咨询线下专业信号：持续 2 周以上情绪低落/拒学/严重社交回避；睡眠问题持续数月影响日间；注意力在所有领域明显且持续。建议科室：儿童发育行为儿科 / 儿童心理。</p>
+  </div>`;
+}
+function renderGuide(){
+  const box=document.getElementById('view-guide'); if(!box)return;
+  box.innerHTML=guideHTML();
+}
+
+/* ============ 规则页：六大板块分值说明 + 家长须知 ============ */
+function renderRules(){
+  const box=document.getElementById('view-rules'); if(!box)return;
+  const tabs=['分值说明','家长须知'];
+  let html=`<div class="dim-tabs" style="padding-top:10px;">`+tabs.map(t=>`<div class="dim-tab ${rulesTab===t?'on':''}" onclick="rulesTab='${t}';renderRules()">${t}</div>`).join('')+`</div>`;
+  if(rulesTab==='家长须知'){ box.innerHTML=html+guideHTML(); return; }
+  // 分值说明汇总：按六大维度罗列
+  html+=RULES.dim.map(d=>{
+    const items=RULES.items.filter(i=>i.dim===d.key);
+    return `<div class="sec-head"><span class="e">${dimEmo(d.key)}</span><div><div class="t" style="color:${d.color}">${dimName(d)}</div><div class="s">${d.type==='品质'?'品质层 · 鼓励为主':'习惯层 · 计分维度'} · 共 ${items.length} 项</div></div></div>`
+      + items.map(it=>`<div class="rule-item" style="background:#fff;border-radius:14px;padding:10px 12px;margin:0 12px 8px;box-shadow:0 2px 8px rgba(0,0,0,.04);">
+          <div class="nm">${emoFor(it.name)} ${it.name} <span style="color:#16A34A;">+${it.score}</span></div>
+          <div class="meta">${it.freq||''}${it.op?' · '+it.op:''}</div>
+          ${it.desc?`<div class="desc">${it.desc}</div>`:''}${it.eg?`<div class="desc">例：${it.eg}</div>`:''}
+        </div>`).join('');
+  }).join('');
+  // 扣分说明
+  html+=`<div class="sec-head"><span class="e">💧</span><div><div class="t" style="color:#EF4444">温柔扣分</div><div class="s">仅针对少数底线行为 · 共 ${RULES.deduct.length} 项</div></div></div>`
+    + RULES.deduct.map(d=>`<div class="rule-item" style="background:#fff;border-radius:14px;padding:10px 12px;margin:0 12px 8px;box-shadow:0 2px 8px rgba(0,0,0,.04);">
+        <div class="nm">${d.icon||'💧'} ${d.name} <span style="color:#DC2626;">${d.score}</span></div>
+        ${d.desc?`<div class="desc">${d.desc}</div>`:''}
+      </div>`).join('');
+  html+=`<div style="height:10px;"></div>`;
+  box.innerHTML=html;
+}
+
+/* ============ 详情弹窗 ============ */
+function openDetailItem(name){
+  const it=RULES.items.find(i=>i.name===name); if(!it)return;
+  const cap=parseCap(it.freq); const used=usedOf(it); const remain=cap?cap.max-used:Infinity;
+  const authorized=canDeclare();
+  const direct=canDirect(it);
+  document.getElementById('detName').textContent=it.name;
+  const detLines=[`${emoFor(it.name)} 分值：+${it.score} 金币`, `频次：${it.freq}`];
+  if(it.desc) detLines.push(it.desc);
+  if(it.eg) detLines.push('示例：'+it.eg);
+  if(cap) detLines.push(`本${cap.period==='day'?'日':'周'}已用 ${used}/${cap.max}${capUnit(it.freq)}`);
+  document.getElementById('detDesc').innerHTML=detLines.join('<br>');
+  document.getElementById('detBody').innerHTML='';
+  const actions=document.getElementById('detActions');
+  if(ME.role==='kid'){
+    actions.innerHTML=`<button class="btn-gold" style="flex:1;" onclick="submitRemind('${it.name}')">我做到了，请大人帮我加分</button>`;
+  } else if(authorized && remain>0){
+    const label=direct?(ME.role==='admin'?'直接加分':'直接加分'):'提交申报';
+    actions.innerHTML=`<button class="btn-primary" style="flex:1;" onclick="closeSheet();openScoreByName('${it.name}')">${label}</button>`;
+  } else {
+    actions.innerHTML=`<button class="btn-ghost" style="flex:1;" onclick="closeSheet()">关闭</button>`;
+  }
+  document.getElementById('detailMask').classList.add('on');
+}
+function openDetailDeduct(name){
+  const d=RULES.deduct.find(x=>x.name===name); if(!d)return;
+  document.getElementById('detName').textContent=d.name;
+  document.getElementById('detDesc').innerHTML=`${d.icon} 扣分：${d.score} 金币<br>${d.desc}`;
+  document.getElementById('detBody').innerHTML='';
+  const actions=document.getElementById('detActions');
+  if(ME.role==='admin') actions.innerHTML=`<button class="btn-red" style="flex:1;" onclick="closeSheet();openDeductByName('${d.name}')">登记扣分</button>`;
+  else if(ME.role==='elder') actions.innerHTML=`<button class="btn-red" style="flex:1;" onclick="closeSheet();openDeductByName('${d.name}')">提交扣分申请</button>`;
+  else actions.innerHTML=`<button class="btn-ghost" style="flex:1;" onclick="closeSheet()">关闭</button>`;
+  document.getElementById('detailMask').classList.add('on');
+}
+function closeDetail(e){ if(e.target.id==='detailMask') document.getElementById('detailMask').classList.remove('on'); }
+
+/* ============ 计分弹窗 ============ */
+let ss={idx:null,val:null,qty:1,subs:[],rope:{cont:'',one:''}};
+function openScoreByName(name){ const idx=RULES.items.findIndex(i=>i.name===name); if(idx>=0) openScore(idx); }
+function openScore(idx){
+  const it=RULES.items[idx]; ss={idx,val:null,qty:1,subs:[],rope:{cont:'',one:''}};
+  document.getElementById('ssName').textContent=it.name;
+  document.getElementById('ssDesc').textContent=[it.freq,it.desc].filter(Boolean).join(' · ');
+  const optBox=document.getElementById('ssOpt'); const subsBox=document.getElementById('ssSubs');
+  const ropeBox=document.getElementById('ssRope'); const qtyBox=document.getElementById('ssQty');
+  optBox.innerHTML=''; subsBox.innerHTML=''; ropeBox.classList.add('hidden'); qtyBox.classList.add('hidden');
+  if(it.mode==='复合'){
+    ss.subs=it.subs.map(()=>null);
+    subsBox.innerHTML=it.subs.map((s,i)=>`<div class="subrow"><div class="sl">${s.label}</div><div class="sopts">${s.opts.map(o=>`<button onclick="pickSub(${i},${o},this)">${o}分</button>`).join('')}</div></div>`).join('');
+  } else if(it.special==='rope'){
+    ropeBox.classList.remove('hidden');
+    const prev=[...(STATE.records||[])].reverse().find(r=>r.item===it.name&&r.remarks);
+    document.getElementById('ssRopeHint').textContent=prev?`上次：连续 ${prev.remarks.cont} / 1分钟 ${prev.remarks.one}（≥上次各+1分）`:'首次完成即得 2 分（保底）';
+  } else if(it.mode==='质量'&&it.opts){
+    optBox.innerHTML=it.opts.map(o=>`<button onclick="pickOpt(this,${o[1]})">${o[0]}（${o[1]}分）</button>`).join('');
+  } else {
+    const fixed=parseInt(it.score.replace('~',''),10);
+    optBox.innerHTML=`<button class="sel" onclick="pickOpt(this,${fixed})">+${it.score} 分</button>`; ss.val=fixed;
+  }
+  if(/可累计/.test(it.freq) && it.special!=='rope' && it.mode!=='复合'){
+    qtyBox.classList.remove('hidden');
+    const cap=parseCap(it.freq); const used=usedOf(it);
+    const remain=cap?Math.max(0,cap.max-used):10; ss.qty=1;
+    document.getElementById('ssQtyN').textContent='1';
+    document.getElementById('ssQtyHint').textContent=cap?`（本${cap.period==='day'?'日':'周'}剩 ${remain}${capUnit(it.freq)}）`:'';
+  }
+  document.getElementById('ssReason').value='';
+  document.getElementById('ssReason').placeholder='必填：做了什么 / 具体事例（如：'+(it.eg||'跳绳138个，超过上次')+'）';
+  document.getElementById('scoreMask').classList.add('on');
+}
+function chgQty(d){ const it=RULES.items[ss.idx]; const cap=parseCap(it.freq); const used=usedOf(it);
+  const maxQ=cap?Math.max(1,cap.max-used):20; ss.qty=Math.min(maxQ,Math.max(1,ss.qty+d));
+  document.getElementById('ssQtyN').textContent=ss.qty; }
+function pickOpt(el,v){ document.querySelectorAll('#ssOpt button').forEach(b=>b.classList.remove('sel')); el.classList.add('sel'); ss.val=v; }
+function pickSub(i,v,el){ el.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('sel')); el.classList.add('sel'); ss.subs[i]=v; }
+function closeSheet(e){ if(e && e.target!==e.currentTarget) return; document.querySelectorAll('.mask').forEach(m=>m.classList.remove('on')); }
+async function submitScore(){
+  const it=RULES.items[ss.idx]; const reason=document.getElementById('ssReason').value.trim();
+  let score=null;
+  if(it.mode==='复合'){ if(ss.subs.some(x=>x===null)){ toast('请为每项行为打分'); return; } score=ss.subs.reduce((a,b)=>a+b,0); }
+  else if(it.special==='rope'){ const cont=document.getElementById('ssRopeCont').value, one=document.getElementById('ssRopeOne').value;
+    if(cont===''||one===''){ toast('请填写两项数量备注'); return; } ss.rope={cont,one};
+    const prev=[...STATE.records].reverse().find(r=>r.item===it.name&&r.remarks); let s=it.floor||2;
+    if(prev&&prev.remarks){ if(Number(cont)>=Number(prev.remarks.cont))s+=1; if(Number(one)>=Number(prev.remarks.one))s+=1; } score=Math.min(4,Math.max(it.floor||2,s)); }
+  else { if(ss.val===null){ toast('请先选择得分档位'); return; } score=ss.val; }
+  if(!reason){ toast('请填写原因（做了什么/具体事例）'); return; }
+  const cap=parseCap(it.freq);
+  if(cap&&it.mode!=='复合'&&it.special!=='rope'){ const used=usedOf(it); if(used+ss.qty>cap.max){ toast(`「${it.name}」本${cap.period==='day'?'日':'周'}上限 ${cap.max}${capUnit(it.freq)}，已用 ${used}`); return; } }
+  const payload={ item:it.name, score, qty:ss.qty, reason, subs:ss.subs, cont:ss.rope.cont, one:ss.rope.one };
+  try{ const d=await call('/api/record',payload); closeSheet();
+    await fetchState(); renderAll();
+    if(d.status==='confirmed'){ toast(`已加分 +${score*ss.qty} ✅`); sparkle(); } else toast('已提交申报，等爸妈确认 📝');
+  }catch(e){ toast(e.message||'提交失败'); }
+}
+
+/* ============ 兑换弹窗 ============ */
+let exReq={name:'',cost:0};
+function openExchange(name,cost){ if(STATE.total<cost){ toast('金币不够哦，再攒攒 💪'); return; }
+  exReq={name,cost}; document.getElementById('exName').textContent=name;
+  document.getElementById('exCost').textContent=cost; document.getElementById('exBalance').textContent=STATE.total;
+  document.getElementById('exReason').value='';
+  document.getElementById('exMask').classList.add('on'); }
+async function submitRemind(itemName){
+  try{ await call('/api/remind',{item:itemName}); closeSheet();
+    await fetchState(); renderAll();
+    toast('已提醒大人：「'+itemName+'」等你确认 💪'); }catch(e){ toast(e.message||'提醒失败'); } }
+async function dismissRemind(id){ try{ await call('/api/remindDismiss',{id}); await fetchState(); renderAll(); toast('已处理提醒'); }catch(e){ toast(e.message); } }
+
+async function submitExchange(){ const reason=document.getElementById('exReason').value.trim();
+  if(!reason){ toast('请填写想换的原因'); return; }
+  try{ const d=await call('/api/exchange',{name:exReq.name,cost:exReq.cost,reason}); closeSheet();
+    await fetchState(); renderAll();
+    toast(d.status==='approved'?'兑换成功 🎉':'已申请，等爸妈批准 🎁'); }catch(e){ toast(e.message||'兑换失败'); } }
+
+/* ============ 扣分弹窗 ============ */
+let deductReq={name:'',score:0};
+function openDeductByName(name){ const d=RULES.deduct.find(x=>x.name===name); if(!d)return; deductReq={name:d.name,score:d.score};
+  document.getElementById('deductName').textContent=d.name; document.getElementById('deductScore').textContent=d.score;
+  document.getElementById('deductReason').value=''; document.getElementById('deductMask').classList.add('on'); }
+async function submitDeduct(){ const reason=document.getElementById('deductReason').value.trim();
+  if(!reason){ toast('请填写扣分原因'); return; }
+  try{ const d=await call('/api/deduct',{name:deductReq.name,reason}); closeSheet();
+    await fetchState(); renderAll();
+    toast(d.status==='confirmed'?'已登记扣分':'扣分申请已提交，等爸妈确认'); }catch(e){ toast(e.message||'扣分失败'); } }
+
+/* ============ 审批与工具 ============ */
+async function confirmRec(id){ try{ await call('/api/confirm',{recId:id,approve:true}); await fetchState(); renderAll(); toast('已确认 ✅'); }catch(e){ toast(e.message); } }
+async function rejectRec(id){ try{ await call('/api/confirm',{recId:id,approve:false}); await fetchState(); renderAll(); toast('已驳回'); }catch(e){ toast(e.message); } }
+async function confirmEx(id){ try{ await call('/api/exchangeConfirm',{recId:id,approve:true}); await fetchState(); renderAll(); toast('已批准 🎁'); }catch(e){ toast(e.message); } }
+async function rejectEx(id){ try{ await call('/api/exchangeConfirm',{recId:id,approve:false}); await fetchState(); renderAll(); toast('已驳回，积分已加回'); }catch(e){ toast(e.message); } }
+async function toggleDeclare(id){ const cur=ACCOUNTS.find(a=>a.id===id); try{ const d=await call('/api/account',{id,canDeclare:!cur.canDeclare}); syncAccts(d.accounts); renderAdmin(); toast('已更新 '+id+' 授权'); }catch(e){ toast(e.message); } }
+async function toggleDim(id,dim){ const cur=ACCOUNTS.find(a=>a.id===id)||{directDims:[]}; let dd=cur.directDims?cur.directDims.slice():[]; if(dd.includes(dim))dd=dd.filter(x=>x!==dim); else dd.push(dim);
+  try{ const d=await call('/api/account',{id,directDims:dd}); syncAccts(d.accounts); renderAdmin(); toast('已更新 '+id+' 权限'); }catch(e){ toast(e.message); } }
+function syncAccts(arr){ arr.forEach(a=>{ const cur=ACCOUNTS.find(x=>x.id===a.id); if(cur){ cur.directDims=a.directDims||[]; cur.canDeclare=a.canDeclare; } }); if(MODE==='local')Local.saveAccts(ACCOUNTS); if(ME){ const m=arr.find(a=>a.id===ME.id); if(m){ ME.directDims=m.directDims||[]; ME.canDeclare=m.canDeclare; } } }
+async function resetPin(id){ const np=prompt('为 '+id+' 设置新密码（数字）：'); if(np===null)return; if(!/^\d+$/.test(np)){ toast('密码需为数字'); return; }
+  try{ await call('/api/account',{id,pin:np}); toast('密码已重置'); }catch(e){ toast(e.message); } }
+async function setCarer(c){ try{ await call('/api/carer',{carer:c}); await fetchState(); renderAdmin(); toast('带娃备注：'+c); }catch(e){ toast(e.message); } }
+
+/* ============ 菜单 / 工具 ============ */
+function openMenu(){ if(!ME)return; document.getElementById('menuName').textContent=ME.name; document.getElementById('menuRole').textContent=ME.role==='admin'?'管理员':ME.role==='kid'?'宝宝':'长辈'; document.getElementById('menuMask').classList.add('on'); }
+function showBanner(msg){ let b=document.querySelector('.banner'); if(!b){ b=document.createElement('div'); b.className='banner'; document.body.appendChild(b); } b.textContent=msg; }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1800); }
+function sparkle(){ for(let i=0;i<8;i++){ const s=document.createElement('div'); s.className='sparkle'; s.textContent='⭐'; s.style.left=(Math.random()*80+10)+'vw'; s.style.top=(Math.random()*40+20)+'vh'; document.body.appendChild(s); setTimeout(()=>s.remove(),900); } }
+</script>
+</body>
+</html>
