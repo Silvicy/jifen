@@ -4,10 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="color-scheme" content="light">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>椰子小超人银行</title>
 <style>
   :root{
+    color-scheme:light;
     --bg:#FFF7ED; --card:#FFFFFF; --ink:#3E2723; --sub:#8D6E63; --line:#F5E6D3;
     --blue:#3B82F6; --orange:#F97316; --green:#22C55E; --yellow:#EAB308; --red:#EF4444;
     --purple:#8B5CF6; --gold:#F59E0B; --gold2:#FBBF24;
@@ -15,9 +17,12 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;}
   .app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--bg);position:relative;padding-bottom:78px;}
-  .topbar{position:sticky;top:0;z-index:30;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:10px 12px;}
-  .topbar .logo{font-size:17px;font-weight:900;background:linear-gradient(90deg,var(--gold),var(--red));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .topbar{position:sticky;top:0;z-index:30;background:#fff;border-bottom:1px solid var(--line);padding:10px 12px 8px;}
+  .tb-row{display:flex;align-items:center;gap:8px;}
+  .topbar .logo{font-size:17px;font-weight:900;background:linear-gradient(90deg,var(--gold),var(--red));-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap;}
   .topbar .spacer{flex:1;}
+  .tb-sub{display:flex;align-items:center;gap:8px;margin-top:7px;}
+  .rolechip{white-space:nowrap;flex-shrink:0;}
   .modechip{font-size:10px;padding:3px 8px;border-radius:999px;font-weight:800;}
   .modechip.server{background:#DCFCE7;color:#15803D;}
   .modechip.local{background:#FEF3C7;color:#B45309;}
@@ -217,12 +222,17 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <div class="logo">🏝️ 椰子小超人银行</div>
-    <div class="spacer"></div>
-    <span class="modechip local" id="modeChip">本地模式</span>
-    <button class="top-btn" id="refreshBtn" onclick="doRefresh()" title="刷新同步">🔄</button>
-    <div class="rolechip" id="roleChip" onclick="openMenu()">—</div>
-    <button class="top-btn" onclick="logout()">退出</button>
+    <div class="tb-row">
+      <div class="logo">🏝️ 椰子小超人银行</div>
+      <div class="spacer"></div>
+      <div class="rolechip" id="roleChip" onclick="openMenu()">—</div>
+      <button class="top-btn" onclick="logout()">退出</button>
+    </div>
+    <div class="tb-sub">
+      <span class="modechip local" id="modeChip">本地模式</span>
+      <div class="spacer"></div>
+      <button class="top-btn" id="refreshBtn" onclick="doRefresh()" title="刷新同步">🔄 刷新</button>
+    </div>
   </div>
 
   <div class="view" id="view-score"></div>
@@ -320,13 +330,13 @@
 <!-- login -->
 <div class="login" id="login" style="display:flex;">
   <div class="box">
-    <h2>🏦 小宇的积分银行</h2>
+    <h2>🌴 椰子小超人银行</h2>
     <div class="sub">做好事赚金币 · 存金币换心愿</div>
     <div class="accts" id="acctGrid"></div>
     <div class="pinshow" id="pinShow"><i></i><i></i><i></i><i></i></div>
     <div class="pinpad" id="pinPad"></div>
     <button class="go" onclick="doLogin()">登 录</button>
-    <div class="hint">默认密码：妈妈/爸爸 0000 · 外公/外婆 1111 · 爷爷/奶奶 2222 · 宝宝 3333<br>微信绑定为后续部署步骤；当前直接打开为本地模式，运行 server.js 可全家联网</div>
+    <div class="hint">忘了密码？找管理员（妈妈/爸爸）在「管理 → 账号权限」里重置</div>
   </div>
 </div>
 
@@ -868,9 +878,12 @@ function renderAdmin(){
   html+=`<div class="admin-card"><h4>⏳ 待确认申报</h4>`+(pend.length?pend.map(r=>`<div class="rec"><div class="t">${r.item} +${r.score}</div><div class="d">${r.reason}</div><div class="op">${r.operator} · ${r.dim}</div><div class="mini"><button class="ok" onclick="confirmRec(${r.id})">确认</button><button class="no" onclick="rejectRec(${r.id})">驳回</button></div></div>`).join(''):'<p>暂无</p>')+`</div>`;
   const pe=STATE.exchanges.filter(x=>x.status==='pending');
   html+=`<div class="admin-card"><h4>🎁 待批准兑换</h4>`+(pe.length?pe.map(x=>`<div class="rec"><div class="t">${x.name}（${x.cost}分）</div><div class="op">申请人 ${x.applicant}</div><div class="mini"><button class="ok" onclick="confirmEx(${x.id})">批准</button><button class="no" onclick="rejectEx(${x.id})">驳回</button></div></div>`).join(''):'<p>暂无</p>')+`</div>`;
-  html+=`<div class="admin-card"><h4>🔐 账号权限</h4><div>${ACCOUNTS.filter(a=>a.role==='elder').map(a=>{
+  html+=`<div class="admin-card"><h4>🔑 我的密码</h4><p>给自己改密码，改完下次登录用新密码</p><button class="btn-primary" onclick="resetPin('${ME.id}')">修改我的密码</button></div>`;
+  html+=`<div class="admin-card"><h4>🔐 账号权限</h4><p>点「重置密码」给对应家人设置新的 4 位数字密码；长辈可开关「学习直接加分」</p><div>${ACCOUNTS.map(a=>{
+    const isElder=a.role==='elder';
     const has=(a.directDims||[]).includes('学习');
-    return `<div class="admin-row"><div class="nm">${a.name}</div><button class="${has?'btn-primary':'btn-ghost'}" onclick="toggleDim('${a.id}','学习')">学习直接加分${has?'✓':''}</button><button class="btn-ghost" onclick="resetPin('${a.id}')">重置密码</button></div>`;
+    const tag=a.role==='admin'?' 👑':a.role==='kid'?' 🧒':'';
+    return `<div class="admin-row"><div class="nm">${a.name}${tag}</div>${isElder?`<button class="${has?'btn-primary':'btn-ghost'}" onclick="toggleDim('${a.id}','学习')">学习直接加分${has?'✓':''}</button>`:''}<button class="btn-ghost" onclick="resetPin('${a.id}')">重置密码</button></div>`;
   }).join('')}</div></div>`;
   if(MODE==='server'){
     html+=`<div class="admin-card"><h4>💾 数据备份与恢复</h4>
@@ -1099,7 +1112,7 @@ async function toggleDeclare(id){ const cur=ACCOUNTS.find(a=>a.id===id); try{ co
 async function toggleDim(id,dim){ const cur=ACCOUNTS.find(a=>a.id===id)||{directDims:[]}; let dd=cur.directDims?cur.directDims.slice():[]; if(dd.includes(dim))dd=dd.filter(x=>x!==dim); else dd.push(dim);
   try{ const d=await call('/api/account',{id,directDims:dd}); syncAccts(d.accounts); renderAdmin(); toast('已更新 '+id+' 权限'); }catch(e){ toast(e.message); } }
 function syncAccts(arr){ arr.forEach(a=>{ const cur=ACCOUNTS.find(x=>x.id===a.id); if(cur){ cur.directDims=a.directDims||[]; cur.canDeclare=a.canDeclare; } }); if(MODE==='local')Local.saveAccts(ACCOUNTS); if(ME){ const m=arr.find(a=>a.id===ME.id); if(m){ ME.directDims=m.directDims||[]; ME.canDeclare=m.canDeclare; } } }
-async function resetPin(id){ const np=prompt('为 '+id+' 设置新密码（数字）：'); if(np===null)return; if(!/^\d+$/.test(np)){ toast('密码需为数字'); return; }
+async function resetPin(id){ const a=ACCOUNTS.find(x=>x.id===id); const np=prompt('为「'+(a?a.name:id)+'」设置新密码（4位数字）：'); if(np===null)return; if(!/^\d+$/.test(np)||np.length<4){ toast('密码需为至少4位数字'); return; }
   try{ await call('/api/account',{id,pin:np}); toast('密码已重置'); }catch(e){ toast(e.message); } }
 async function setCarer(c){ try{ await call('/api/carer',{carer:c}); await fetchState(); renderAdmin(); toast('带娃备注：'+c); }catch(e){ toast(e.message); } }
 

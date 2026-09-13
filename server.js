@@ -90,11 +90,11 @@ const RULES = {
 
   ],
   deduct: [
-    { name: '打人/说脏话等不文明行为', score: -5 },
-    { name: '说谎', score: -5 },
-    { name: '危险行为（如马路乱跑）', score: -5 },
-    { name: '故意破坏他人/公共物品', score: -3 },
-    { name: '未按约定执行（到时未关电视/未回家等）', score: -3 },
+    { name: '打人/说脏话等不文明行为', score: -5, icon: '✋', desc: '动手或说脏话，伤害别人' },
+    { name: '说谎', score: -5, icon: '🙊', desc: '被确认的说谎行为' },
+    { name: '危险行为（如马路乱跑）', score: -5, icon: '⚠️', desc: '危及自身或他人安全的行为' },
+    { name: '故意破坏他人/公共物品', score: -3, icon: '💔', desc: '故意损坏东西' },
+    { name: '未按约定执行（到时未关电视/未回家等）', score: -3, icon: '📺', desc: '已经约定好、提醒后仍不执行' },
   ],
   exchange: [
     { tier: '小兑换（日常）', items: [
