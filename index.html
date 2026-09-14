@@ -245,6 +245,7 @@
   <div class="view" id="view-admin"></div>
   <div class="view" id="view-guide"></div>
   <div class="view" id="view-rules"></div>
+  <div class="view" id="view-guest"></div>
 
   <div class="nav" id="nav">
     <a data-v="score" onclick="navTo('score')"><span class="ic">☀️</span>加分</a>
@@ -336,11 +337,13 @@
   <div class="box">
     <h2>🌴 椰子小超人银行</h2>
     <div class="sub">做好事赚金币 · 存金币换心愿</div>
-    <div class="accts" id="acctGrid"></div>
+    <div class="accts" id="acctGrid"><button onclick="selAcct('mama')"><span>妈妈</span><span class="r">管理员</span></button><button onclick="selAcct('baba')"><span>爸爸</span><span class="r">管理员</span></button><button onclick="selAcct('waigong')"><span>外公</span><span class="r">长辈</span></button><button onclick="selAcct('waipo')"><span>外婆</span><span class="r">长辈</span></button><button onclick="selAcct('yeye')"><span>爷爷</span><span class="r">长辈</span></button><button onclick="selAcct('nainai')"><span>奶奶</span><span class="r">长辈</span></button><button onclick="selAcct('baobao')"><span>宝宝</span><span class="r">宝宝</span></button></div>
     <div class="pinshow" id="pinShow"><i></i><i></i><i></i><i></i></div>
-    <div class="pinpad" id="pinPad"></div>
+    <div class="pinpad" id="pinPad"><button onclick="pinKey('1')">1</button><button onclick="pinKey('2')">2</button><button onclick="pinKey('3')">3</button><button onclick="pinKey('4')">4</button><button onclick="pinKey('5')">5</button><button onclick="pinKey('6')">6</button><button onclick="pinKey('7')">7</button><button onclick="pinKey('8')">8</button><button onclick="pinKey('9')">9</button><button onclick="pinKey('清空')">清空</button><button onclick="pinKey('0')">0</button><button onclick="pinKey('删除')" class="del">删除</button></div>
     <button class="go" onclick="doLogin()">登 录</button>
+    <button class="go ghost" onclick="guestEnter()" style="background:#fff;color:var(--ink);border:2px solid var(--gold);">👁️ 游客浏览（只看不能改）</button>
     <div class="hint">忘了密码？找管理员（妈妈/爸爸）在「管理 → 账号权限」里重置</div>
+    <div class="hint" id="buildStamp" style="color:#9CA3AF;">版本 v2.13 · 构建 09-14 20:55</div>
     <button class="fontbtn" id="fontBtnLogin" onclick="cycleFont()">🔠 字体：标准</button>
   </div>
 </div>
@@ -348,6 +351,20 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* ============ 全局错误显示器：任何脚本报错都在页面底部红条显示，方便远程定位 ============ */
+(function(){
+  function showErr(msg){
+    try{
+      var d=document.getElementById('jserr');
+      if(!d){ d=document.createElement('div'); d.id='jserr';
+        d.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#DC2626;color:#fff;font-size:12px;line-height:1.5;padding:6px 10px;max-height:32%;overflow:auto;word-break:break-all;';
+        (document.body||document.documentElement).appendChild(d); }
+      d.textContent+=('⚠ '+msg+'　');
+    }catch(e){}
+  }
+  window.addEventListener('error',function(ev){ showErr((ev&&ev.message||'脚本错误')+(ev&&ev.lineno?('（第'+ev.lineno+'行）'):'')); });
+  window.addEventListener('unhandledrejection',function(ev){ var r=ev&&ev.reason; showErr('异步:'+(r&&(r.message||r)||'未知')); });
+})();
 /* ============ 内置默认规则（离线本地模式使用，与 server.js 一致） ============ */
 const EMBED_RULES = {
   dim: [
@@ -355,7 +372,7 @@ const EMBED_RULES = {
     { key: '运动', name: '运动小健将', color: '#F97316', type: '习惯' },
     { key: '家务', name: '家务小帮手', color: '#22C55E', type: '习惯' },
     { key: '自理', name: '自理小能手', color: '#EAB308', type: '习惯' },
-    { key: '品格', name: '品格小君子', color: '#A855F7', type: '习惯' },
+    { key: '品格', name: '品格小君子', color: '#A855F7', type: '品格' },
     { key: '勇气', name: '勇气小超人', color: '#EF4444', type: '品质' },
   ],
   items: [
@@ -467,15 +484,40 @@ const EMBED_ACCOUNTS = [
 ];
 
 let RULES = EMBED_RULES;
+// 规则自愈：旧版本保存计分卡时曾丢失 deduct/exchange，加载后自动补全，避免扣分页/兑换页崩溃
+function healRules(){
+  try{
+    if(!RULES||!Array.isArray(RULES.dim)||!Array.isArray(RULES.items)){ RULES=JSON.parse(JSON.stringify(EMBED_RULES)); return; }
+    if(!Array.isArray(RULES.deduct)||!RULES.deduct.length) RULES.deduct=JSON.parse(JSON.stringify(EMBED_RULES.deduct));
+    if(!Array.isArray(RULES.exchange)||!RULES.exchange.length) RULES.exchange=JSON.parse(JSON.stringify(EMBED_RULES.exchange));
+  }catch(e){}
+}
 let ACCOUNTS = EMBED_ACCOUNTS.slice();
 let ME = null;
+let GUEST = false;
 let STATE = null;
 let MODE = 'local';
 let loginSel = null, loginPin = '';
 let curDim = '学习';
 let recFilter = '全部';
 let rulesTab = '家长须知';
-const LS_STATE = 'sb_state', LS_ACCT = 'sb_accounts', LS_USER = 'sb_user';
+const LS_STATE = 'sb_state', LS_ACCT = 'sb_accounts', LS_USER = 'sb_user', LS_RULES = 'sb_rules', LS_AUDIT = 'sb_audit';
+
+/* ============ 北京时间（UTC+8）工具函数，避免服务器 UTC 导致显示差 8 小时 ============ */
+function fmtNowCN(){
+  const d=new Date();
+  const parts=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(d);
+  const get=t=>parts.find(p=>p.type===t)?.value||'';
+  return `${get('year')}/${get('month')}/${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
+}
+function fmtTS(ts){
+  if(!ts)return '';
+  try{
+    const d=new Date(ts);
+    if(isNaN(d))return ts;
+    return d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'});
+  }catch(e){ return ts; }
+}
 
 /* ============ emoji mapping ============ */
 function emoFor(name){
@@ -498,10 +540,27 @@ function emoFor(name){
 
 /* ============ 本地存储（离线模式） ============ */
 const Local = {
-  loadState(){ try { const s=JSON.parse(localStorage.getItem(LS_STATE)) || this.defaultState(); if(!Array.isArray(s.reminders)) s.reminders=[]; if(s.points && ('日常好习惯' in s.points)){ const pts={}; EMBED_RULES.dim.forEach(d=>pts[d.key]=0); for(const r of (s.records||[])){ if(r.status!=='confirmed') continue; const it=EMBED_RULES.items.find(i=>i.name===r.item); if(it&&pts[it.dim]!==undefined) pts[it.dim]+= (r.type==='sub'? -Math.abs(r.score): r.score); } s.points=pts; this.saveState(s); } return s; } catch(e){ return this.defaultState(); } },
-  saveState(s){ localStorage.setItem(LS_STATE, JSON.stringify(s)); },
-  loadAccts(){ try { return JSON.parse(localStorage.getItem(LS_ACCT)) || null; } catch(e){ return null; } },
-  saveAccts(a){ localStorage.setItem(LS_ACCT, JSON.stringify(a)); },
+  // 内存兜底：隐私模式/受限浏览器禁用 localStorage 写入时，整个会话内仍可正常使用（仅重启后不保留）
+  _memState:null, _memAccts:null, _memRules:null, _memAudit:null,
+  loadState(){ try { const raw=localStorage.getItem(LS_STATE); if(raw===null&&this._memState) return this._memState; const s=JSON.parse(raw) || this.defaultState(); if(s.points && ('日常好习惯' in s.points)){ const pts={}; EMBED_RULES.dim.forEach(d=>pts[d.key]=0); for(const r of (s.records||[])){ if(r.status!=='confirmed') continue; const it=EMBED_RULES.items.find(i=>i.name===r.item); if(it&&pts[it.dim]!==undefined) pts[it.dim]+= (r.type==='sub'? -Math.abs(r.score): r.score); } s.points=pts; this.saveState(s); } return this.recalc(s); } catch(e){ return this._memState||this.defaultState(); } },
+  saveState(s){ if(s) this.recalc(s); this._memState=s; try{ localStorage.setItem(LS_STATE, JSON.stringify(s)); }catch(e){} },
+  // 分数唯一事实源：每次保存都从记录重算（已撤销/已驳回不计；兑换按预扣减），彻底杜绝"分数与记录对不上"
+  recalc(st){ if(!st) return st;
+    if(!Array.isArray(st.records)) st.records=[]; if(!Array.isArray(st.exchanges)) st.exchanges=[]; if(!Array.isArray(st.reminders)) st.reminders=[]; if(!st.points||typeof st.points!=='object') st.points={};
+    const dims=(typeof RULES!=='undefined'&&RULES&&Array.isArray(RULES.dim))?RULES.dim:EMBED_RULES.dim;
+    const pts={}; dims.forEach(d=>pts[d.key]=0); let total=0;
+    for(const r of st.records){ if(r.status==='rejected'||r.void) continue; const t=r.type||'add';
+      if(t==='add'&&r.status==='confirmed'){ pts[r.dim]=(pts[r.dim]||0)+r.score; total+=r.score; }
+      else if(t==='sub'&&r.status==='confirmed'){ total+=r.score; } }
+    for(const x of st.exchanges){ if(x.status!=='rejected') total-=x.cost; }
+    st.points=pts; st.total=Math.max(0,total); return st; },
+  loadAccts(){ try { const raw=localStorage.getItem(LS_ACCT); if(raw===null&&this._memAccts) return this._memAccts; return JSON.parse(raw) || null; } catch(e){ return this._memAccts||null; } },
+  saveAccts(a){ this._memAccts=a; try{ localStorage.setItem(LS_ACCT, JSON.stringify(a)); }catch(e){} },
+  // 计分卡配置本地持久化（管理员改卡后，关掉浏览器再打开仍然生效）
+  loadRulesCfg(){ try { const r=JSON.parse(localStorage.getItem(LS_RULES)); if(r&&Array.isArray(r.dim)&&r.dim.length&&Array.isArray(r.items)&&r.items.length) return r; } catch(e){} return this._memRules||null; },
+  saveRulesCfg(r){ this._memRules=r; try{ localStorage.setItem(LS_RULES, JSON.stringify(r)); }catch(e){} },
+  loadAudit(){ try { const a=JSON.parse(localStorage.getItem(LS_AUDIT)); return Array.isArray(a)?a:[]; } catch(e){ return this._memAudit||[]; } },
+  saveAudit(a){ this._memAudit=a; try{ localStorage.setItem(LS_AUDIT, JSON.stringify(a)); }catch(e){} },
   defaultState(){ return { points:{学习:0,运动:0,家务:0,自理:0,品格:0,勇气:0}, total:0, records:[], exchanges:[], reminders:[], carer:'爸妈' }; },
   parseCap(freq){ if(!freq) return null; let period=null,max=null;
     if(/每日1次|每餐1次|每课1次/.test(freq)){period='day';max=freq.includes('每餐')?3:1;}
@@ -526,9 +585,21 @@ const Local = {
   handle(path, body){
     if(path==='/api/login'){ const a=ACCOUNTS.find(x=>x.name===body.name);
       if(!a||a.pin!==String(body.pin||'')) return {error:'账号或密码错误',_c:401};
-      localStorage.setItem(LS_USER,a.id);
+      try{ localStorage.setItem(LS_USER,a.id); }catch(e){}
       return {token:a.id,name:a.name,role:a.role,id:a.id,directDims:a.directDims||[],canDeclare:!!a.canDeclare}; }
+    if(path==='/api/guest'){ const st=this.loadState(); return {ok:true,rules:RULES,public:{points:st.points||{},total:st.total||0,carer:st.carer||'爸妈',recent:(st.records||[]).filter(r=>r.status==='confirmed').slice(0,20)}}; }
     const acc = ACCOUNTS.find(a=>a.id===ME.id);
+    // 撤销记录（管理员）：软删除并回滚积分（本地模式）
+    if(path==='/api/undo'){ if(acc.role!=='admin') return {error:'仅管理员可撤销',_c:403};
+      const st=this.loadState(); const r=st.records.find(x=>x.id===body.recId);
+      if(!r) return {error:'记录不存在',_c:404};
+      if(r.void) return {error:'该记录已撤销',_c:400};
+      if(r.status==='confirmed'){
+        if(r.type==='add'){ st.points[r.dim]=Math.max(0,(st.points[r.dim]||0)-r.score); st.total=Math.max(0,st.total-r.score); }
+        else if(r.type==='sub'){ st.total=Math.max(0,st.total-r.score); }
+      }
+      r.void=true; r.voidBy=acc.name; r.voidAt=fmtNowCN();
+      this.saveState(st); return {ok:true,state:st}; }
     if(path==='/api/mypin'){ const a=ACCOUNTS.find(x=>x.id===ME.id);
       if(!a||String(a.pin)!==String(body.oldPin||'')) return {error:'当前密码不正确',_c:400};
       const np=String(body.newPin||'');
@@ -552,7 +623,7 @@ const Local = {
         if(total>3){ direct=false; notice=`本次 ${total} 分超过单笔 3 分上限，已转为申报，等爸妈确认后计分`; }
         else if(used+total>6){ direct=false; notice=`今日已直接加 ${used} 分，再加 ${total} 分会超过 6 分上限，已转为申报，等爸妈确认后计分`; }
       }
-      const rec={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),dim:item.dim,item:item.name,score:total,qty,type:'add',reason:body.reason||'',operator:acc.name,status:direct?'confirmed':'pending',approver:direct?acc.name:'',remarks:item.special==='rope'?{cont:Number(body.cont)||0,one:Number(body.one)||0}:undefined};
+      const rec={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:fmtNowCN(),dim:item.dim,item:item.name,score:total,qty,type:'add',reason:body.reason||'',operator:acc.name,status:direct?'confirmed':'pending',approver:direct?acc.name:'',remarks:item.special==='rope'?{cont:Number(body.cont)||0,one:Number(body.one)||0}:undefined};
       st.records.unshift(rec); if(direct){st.points[item.dim]+=total;st.total+=total;}
       st.reminders=st.reminders.filter(rm=>rm.item!==item.name); this.saveState(st);
       return {ok:true,status:rec.status,notice}; }
@@ -563,20 +634,20 @@ const Local = {
       this.saveState(st); return {ok:true}; }
     if(path==='/api/exchange'){ const st=this.loadState(); if(st.total<body.cost)return{error:'积分不足',_c:400};
       const status=acc.role==='admin'?'approved':'pending';
-      const ex={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),name:body.name,cost:body.cost,applicant:acc.name,status,approver:status==='approved'?acc.name:''};
+      const ex={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:fmtNowCN(),name:body.name,cost:body.cost,applicant:acc.name,status,approver:status==='approved'?acc.name:''};
       st.total-=body.cost; st.exchanges.unshift(ex); this.saveState(st); return {ok:true,status:ex.status}; }
     if(path==='/api/exchangeConfirm'){ const st=this.loadState(); const ex=st.exchanges.find(x=>x.id===body.recId); if(!ex)return{error:'兑换记录不存在',_c:404};
       if(body.approve){ if(ex.status!=='approved'){ ex.status='approved'; ex.approver=acc.name; } }
       else { if(ex.status!=='rejected'){ ex.status='rejected'; ex.approver=acc.name; st.total+=ex.cost; } }
       this.saveState(st); return {ok:true}; }
     if(path==='/api/deduct'){ if(acc.role==='kid')return{error:'仅家长可登记扣分',_c:403};
-      const d=RULES.deduct.find(x=>x.name===body.name); if(!d)return{error:'扣分项不存在',_c:400};
+      const d=(RULES.deduct||[]).find(x=>x.name===body.name); if(!d)return{error:'扣分项不存在',_c:400};
       if(!body.reason||!body.reason.trim())return{error:'扣分必须填写原因',_c:400};
       const isAdmin=acc.role==='admin'; const st=this.loadState();
-      const rec={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),dim:'扣分',item:d.name,score:d.score,qty:1,type:'sub',reason:body.reason.trim(),operator:acc.name,status:isAdmin?'confirmed':'pending',approver:isAdmin?acc.name:''};
+      const rec={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:fmtNowCN(),dim:'扣分',item:d.name,score:d.score,qty:1,type:'sub',reason:body.reason.trim(),operator:acc.name,status:isAdmin?'confirmed':'pending',approver:isAdmin?acc.name:''};
       st.records.unshift(rec); if(isAdmin)st.total+=d.score; this.saveState(st); return {ok:true,status:rec.status}; }
     if(path==='/api/remind'){ const st=this.loadState();
-      st.reminders.unshift({id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),item:body.item,operator:acc.name,status:'pending'});
+      st.reminders.unshift({id:Date.now()*1000+Math.floor(Math.random()*1000),ts:fmtNowCN(),item:body.item,operator:acc.name,status:'pending'});
       this.saveState(st); return {ok:true}; }
     if(path==='/api/remindDismiss'){ if(acc.role==='kid')return{error:'仅家长可处理提醒',_c:403};
       const st=this.loadState(); st.reminders=st.reminders.filter(rm=>rm.id!==body.id); this.saveState(st); return {ok:true}; }
@@ -584,6 +655,42 @@ const Local = {
     if(path==='/api/account'){ const t=ACCOUNTS.find(x=>x.id===body.id); if(!t)return{error:'账号不存在',_c:404};
       if(body.directDims!==undefined)t.directDims=body.directDims; if(body.canDeclare!==undefined)t.canDeclare=!!body.canDeclare; if(body.pin!==undefined)t.pin=String(body.pin);
       this.saveAccts(ACCOUNTS); return {ok:true,accounts:ACCOUNTS.map(a=>({id:a.id,name:a.name,role:a.role,directDims:a.directDims||[],canDeclare:!!a.canDeclare}))}; }
+    // 计分卡保存（管理员）：本地模式也持久化，关掉浏览器再打开仍生效
+    if(path==='/api/rules/save'){ if(!acc||acc.role!=='admin') return {error:'仅管理员可编辑计分卡',_c:403};
+      const nr=body.rules;
+      if(!nr||!Array.isArray(nr.dim)||!Array.isArray(nr.items)) return {error:'计分卡格式不正确',_c:400};
+      const keys=new Set(nr.dim.map(d=>d.key));
+      for(const it of nr.items) if(!keys.has(it.dim)) return {error:'项目「'+(it.name||'')+'」所属维度不存在',_c:400};
+      const before=JSON.stringify(RULES);
+      // 合并而非整体替换：deduct（扣分卡）/exchange（兑换清单）等未编辑部分必须保留
+      RULES=Object.assign({},RULES,nr);
+      if(!Array.isArray(RULES.deduct)) RULES.deduct=JSON.parse(JSON.stringify(EMBED_RULES.deduct));
+      if(!Array.isArray(RULES.exchange)) RULES.exchange=JSON.parse(JSON.stringify(EMBED_RULES.exchange));
+      this.saveRulesCfg(RULES);
+      const au=this.loadAudit();
+      au.unshift({ts:fmtNowCN(),actor:(acc&&acc.name)||'',action:'编辑计分卡',detail:before===JSON.stringify(RULES)?'未变化':'已更新计分卡配置'});
+      this.saveAudit(au);
+      return {ok:true}; }
+    // 计分卡修改记录
+    if(path==='/api/rules/log'){ if(!acc||acc.role!=='admin') return {error:'仅管理员可查看',_c:403}; return {ok:true,audit:this.loadAudit()}; }
+    // 导出备份
+    if(path==='/api/export'){ if(!acc||acc.role!=='admin') return {error:'仅管理员可导出数据',_c:403};
+      return {ok:true,exportedAt:fmtNowCN(),state:this.loadState(),accounts:ACCOUNTS,rules:RULES,audit:this.loadAudit()}; }
+    // 导入备份：密码以备份为准恢复，记录按 id 去重合并，再按确认记录重算总分
+    if(path==='/api/import'){ if(!acc||acc.role!=='admin') return {error:'仅管理员可导入数据',_c:403};
+      const s=body.state;
+      if(!s||typeof s!=='object'||typeof s.total!=='number'||!s.points||!Array.isArray(s.records)) return {error:'备份文件格式不正确，请选择本系统导出的备份文件',_c:400};
+      if(Array.isArray(body.accounts)){ for(const ba of body.accounts){ const t=ACCOUNTS.find(x=>x.id===ba.id); if(t){ t.pin=String(ba.pin); if(ba.directDims)t.directDims=ba.directDims; if(typeof ba.canDeclare==='boolean')t.canDeclare=ba.canDeclare; } } this.saveAccts(ACCOUNTS); }
+      const st=this.loadState(); if(!Array.isArray(st.reminders))st.reminders=[]; if(!Array.isArray(st.exchanges))st.exchanges=[]; if(!st.carer)st.carer='爸妈';
+      const existing=new Set(st.records.map(r=>r.id)); let added=0;
+      for(const r of s.records) if(!existing.has(r.id)){ st.records.unshift(r); added++; }
+      if(Array.isArray(s.exchanges)){ const exIds=new Set(st.exchanges.map(x=>x.id)); for(const x of s.exchanges) if(!exIds.has(x.id)) st.exchanges.unshift(x); }
+      const pts={}; RULES.dim.forEach(d=>pts[d.key]=0); let total=0;
+      for(const r of st.records){ if(r.status==='rejected'||r.void) continue; const t=r.type||'add';
+        if(t==='add'&&r.status==='confirmed'){ pts[r.dim]=(pts[r.dim]||0)+r.score; total+=r.score; }
+        else if(t==='sub'&&r.status==='confirmed'){ total+=r.score; } }
+      st.points=pts; st.total=total; this.saveState(st);
+      return {ok:true,total:st.total,records:st.records.length,added}; }
     return {error:'接口不存在',_c:404};
   }
 };
@@ -605,7 +712,7 @@ async function call(path, body){
 }
 /* ============ 长辈大字模式（字体档位：标准 / 大 / 超大，记住选择） ============ */
 const FONT_STEPS=[{k:'std',z:1,label:'标准'},{k:'big',z:1.2,label:'大'},{k:'xbig',z:1.4,label:'超大'}];
-function curFont(){ const v=localStorage.getItem('zfont'); return FONT_STEPS.find(x=>x.k===v)||FONT_STEPS[0]; }
+function curFont(){ try{ const v=localStorage.getItem('zfont'); return FONT_STEPS.find(x=>x.k===v)||FONT_STEPS[0]; }catch(e){ return FONT_STEPS[0]; } }
 function applyFont(){
   const f=curFont();
   document.documentElement.style.zoom = (f.z===1?'':String(f.z));
@@ -625,36 +732,59 @@ async function fetchState(){
   else STATE=Local.loadState();
 }
 
-/* ============ 启动 ============ */
+/* ============ 启动（全链路防摔：任何一步出错都不影响登录界面显示） ============ */
 (async function init(){
+  let restored=false;
+  // —— 1) 联网检测：server 模式 or 本地模式 ——
   try {
     const ping = await fetch('/api/ping').then(r=>r.json());
     if(ping.ok && ping.mode==='server'){
-      MODE='server'; RULES=await fetch('/api/rules').then(r=>r.json());
+      MODE='server'; RULES=await fetch('/api/rules').then(r=>r.json()); try { healRules(); } catch(_heal){}
       ACCOUNTS=ping.accounts.map(a=>({id:a.id,name:a.name,role:a.role,directDims:[],canDeclare:a.canDeclare}));
-    } else throw new Error();
+    } else throw new Error('not server');
   } catch(e){
     MODE='local';
-    const la=Local.loadAccts(); if(la) ACCOUNTS=la; else { ACCOUNTS=EMBED_ACCOUNTS.slice(); Local.saveAccts(ACCOUNTS); }
-    RULES=EMBED_RULES;
-    showBanner('本地模式：数据仅存本机，换设备不共享。想全家同步请运行 server.js。');
+    try {
+      const la=Local.loadAccts();
+      if(la && Array.isArray(la) && la.length>0 && la.every(a=>a&&a.id&&a.name&&a.role)){ ACCOUNTS=la; }
+      else { ACCOUNTS=EMBED_ACCOUNTS.slice(); try{ Local.saveAccts(ACCOUNTS); }catch(_){} }
+    } catch(_2){ ACCOUNTS=EMBED_ACCOUNTS.slice(); }
+    try { RULES=Local.loadRulesCfg()||EMBED_RULES; } catch(_3){ RULES=EMBED_RULES; }
+    try { healRules(); } catch(_3b){}
+    try { showBanner('本地模式：数据仅存本机，换设备不共享。想全家同步请运行 server.js。'); } catch(_4){}
   }
-  document.getElementById('modeChip').textContent = MODE==='server'?'已联网·多端同步':'本地模式·未同步';
-  document.getElementById('modeChip').className = 'modechip '+(MODE==='server'?'server':'local');
-  document.getElementById('refreshBtn').style.display = MODE==='server'?'':'none';
-  applyFont();
-  openLogin();
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden && ME){ fetchState().then(renderAll); } });
+  // —— 2) 顶栏状态（元素找不到也不许报错） ——
+  try { const mc=document.getElementById('modeChip'); if(mc){ mc.textContent = MODE==='server'?'已联网·多端同步':'本地模式·未同步'; mc.className='modechip '+(MODE==='server'?'server':'local'); } } catch(_5){}
+  try { const rb=document.getElementById('refreshBtn'); if(rb) rb.style.display = MODE==='server'?'':'none'; } catch(_6){}
+  try { applyFont(); } catch(_7){}
+  // —— 3) 登录态持久化：用本地保存的签名 token 自动恢复（后端重启后旧 token 仍有效） ——
+  try {
+    const saved = localStorage.getItem('zme');
+    if (saved) { ME = JSON.parse(saved); await fetchState(); if (STATE && STATE.records) { afterLogin(); restored=true; } }
+  } catch(e) { try { localStorage.removeItem('zme'); } catch(_8){} }
+  // —— 4) 无论上面哪一步出过岔子，登录界面都必须拉起来 ——
+  if(!restored){
+    try { openLogin(); }
+    catch(eL){ try { showBanner('登录界面加载异常：'+(eL&&eL.message||eL)); } catch(_9){} }
+  }
+  try { document.addEventListener('visibilitychange',()=>{ if(!document.hidden && ME){ fetchState().then(renderAll); } }); } catch(_10){}
 })();
 
 /* ============ 登录 ============ */
 function openLogin(){
   document.getElementById('login').style.display='flex';
-  if(MODE==='local'){ const u=localStorage.getItem(LS_USER); if(u) loginSel=u; }
-  renderAcctGrid(); renderPin();
+  if(MODE==='local'){ try { const u=localStorage.getItem(LS_USER); if(u) loginSel=u; } catch(e){} }
+  // 卡片与键盘已静态预置在 HTML 里，这里只是按状态刷新；任何一步失败都不影响另一个
+  try{ renderAcctGrid(); }catch(e){}
+  try{ renderPin(); }catch(e){}
 }
 function renderAcctGrid(){
   const grid=document.getElementById('acctGrid');
+  if(!grid)return;
+  // 即使 ACCOUNTS 被异常清空，也兜底回默认账号，保证登录页可点
+  if(!ACCOUNTS||!Array.isArray(ACCOUNTS)||!ACCOUNTS.length){
+    ACCOUNTS=EMBED_ACCOUNTS.slice(); try{ Local.saveAccts(ACCOUNTS); }catch(e){}
+  }
   grid.innerHTML=ACCOUNTS.map(a=>`<button class="${loginSel===a.id?'on':''}" onclick="selAcct('${a.id}')"><span>${a.name}</span><span class="r">${a.role==='admin'?'管理员':a.role==='kid'?'宝宝':'长辈'}</span></button>`).join('');
 }
 function selAcct(id){ loginSel=id; loginPin=''; renderAcctGrid(); renderPin(); }
@@ -673,12 +803,13 @@ async function doLogin(){
   try{
     const d=await call('/api/login',{name:acc.name,pin:loginPin});
     ME={id:d.id,name:d.name,role:d.role,directDims:d.directDims||[],canDeclare:d.canDeclare,token:d.token};
+    try { localStorage.setItem('zme', JSON.stringify(ME)); } catch(e) {}
     await fetchState();
     document.getElementById('login').style.display='none';
     afterLogin();
   }catch(e){ toast(e.message||'登录失败'); }
 }
-function logout(){ localStorage.removeItem(LS_USER); ME=null; STATE=null; document.getElementById('roleChip').textContent='—'; document.getElementById('menuMask').classList.remove('on'); openLogin(); }
+function logout(){ try{ localStorage.removeItem(LS_USER); localStorage.removeItem('zme'); }catch(e){} GUEST=false; ME=null; STATE=null; document.getElementById('roleChip').textContent='—'; document.getElementById('menuMask').classList.remove('on'); openLogin(); }
 function afterLogin(){
   document.getElementById('roleChip').textContent=ME.name;
   document.getElementById('roleChip').className='rolechip'+(ME.role==='admin'?' admin':'');
@@ -704,36 +835,45 @@ function usedOf(item){ if(!STATE)return 0; const cap=parseCap(item.freq); if(!ca
     if(cap.period==='day')return d.toDateString()===now.toDateString();
     const wd=x=>{const y=new Date(x);const day=(y.getDay()+6)%7;y.setDate(y.getDate()-day);return y.toDateString();};
     return wd(d)===wd(now); }).reduce((s,r)=>s+(r.qty||1),0); }
-function totalGained(){ let s=0; if(!STATE)return 0; STATE.records.forEach(r=>{if(r.status==='confirmed'&&r.type==='add')s+=r.score;}); return s; }
-function totalDeducted(){ let s=0; if(!STATE)return 0; STATE.records.forEach(r=>{if(r.status==='confirmed'&&r.type==='sub')s+=Math.abs(r.score);}); return s; }
-function totalExchanged(){ let s=0; if(!STATE)return 0; STATE.exchanges.forEach(x=>{if(x.status==='approved')s+=x.cost;}); return s; }
-function totalPendingEx(){ let s=0; if(!STATE)return 0; STATE.exchanges.forEach(x=>{if(x.status==='pending')s+=x.cost;}); return s; }
-function nextReward(){ let all=[]; RULES.exchange.forEach(g=>g.items.forEach(i=>all.push(i))); return all.find(i=>STATE.total<i.cost)||all[all.length-1]||{name:'攒一个大目标',cost:9999}; }
+function totalGained(){ let s=0; if(!STATE)return 0; (STATE.records||[]).forEach(r=>{if(!r.void&&r.status==='confirmed'&&r.type==='add')s+=r.score;}); return s; }
+function totalDeducted(){ let s=0; if(!STATE)return 0; (STATE.records||[]).forEach(r=>{if(!r.void&&r.status==='confirmed'&&r.type==='sub')s+=Math.abs(r.score);}); return s; }
+function totalExchanged(){ let s=0; if(!STATE)return 0; (STATE.exchanges||[]).forEach(x=>{if(x.status==='approved')s+=x.cost;}); return s; }
+function totalPendingEx(){ let s=0; if(!STATE)return 0; (STATE.exchanges||[]).forEach(x=>{if(x.status==='pending')s+=x.cost;}); return s; }
+function nextReward(){ let all=[]; (RULES.exchange||[]).forEach(g=>(g.items||[]).forEach(i=>all.push(i))); return all.find(i=>STATE.total<i.cost)||all[all.length-1]||{name:'攒一个大目标',cost:9999}; }
 function exchangeProgress(cost){ return Math.min(100, Math.floor(STATE.total/cost*100)); }
 
 /* ============ 导航 ============ */
 let curView='score';
 async function navTo(v){
   curView=v;
-  ['score','deduct','exchange','records','kid','admin','guide','rules'].forEach(x=>{const el=document.getElementById('view-'+x); if(el) el.classList.toggle('on',x===v);});
+  ['score','deduct','exchange','records','kid','admin','guide','rules','guest'].forEach(x=>{const el=document.getElementById('view-'+x); if(el) el.classList.toggle('on',x===v);});
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  await fetchState();
+  if(!GUEST) await fetchState();
   if(v==='score')renderScore(); if(v==='deduct')renderDeduct(); if(v==='exchange')renderExchange();
-  if(v==='records')renderRecords(); if(v==='kid')renderKid(); if(v==='admin')renderAdmin(); if(v==='guide')renderGuide(); if(v==='rules')renderRules();
+  if(v==='records')renderRecords(); if(v==='kid')renderKid(); if(v==='admin')renderAdmin(); if(v==='guide')renderGuide(); if(v==='rules')renderRules(); if(v==='guest')renderGuest();
 }
 async function doRefresh(){ await fetchState(); renderAll(); toast('已刷新'); }
 function renderAll(){ renderScore(); renderDeduct(); renderExchange(); renderRecords(); renderKid(); renderAdmin(); renderGuide(); renderRules(); }
 
 /* ============ 加分视图 ============ */
 function dimEmo(key){ return ({ '学习':'📘','运动':'🏀','家务':'🧺','自理':'⏰','品格':'🤝','勇气':'🦸' })[key] || '⭐'; }
+// 维度分层标签：勇气为「鼓励为主·非强制」，品格为「基础品格（应做到）」，其余为习惯层计分
+function layerLabel(d){
+  if(!d) return '习惯层 · 计分维度';
+  if(d.key==='勇气') return '品质层 · 鼓励为主 · 非强制';
+  if(d.key==='品格') return '品格-品质层·基础品格·应做到';
+  return '习惯层 · 计分维度';
+}
 function dimName(d){ return d.name.split(' ').pop(); }
 function renderScore(){
   const box=document.getElementById('view-score'); if(!STATE)return;
+  const guest=GUEST;
   // 顶部维度摘要（恢复：仅 图标+分数，无文字）
   const strip=`<div class="dim-strip">`+RULES.dim.map(d=>{
     const on=d.key===curDim;
+    const v=guest?'—':(STATE.points[d.key]||0);
     return `<div class="dim-card ${on?'on':''}" style="color:${d.color}" onclick="curDim='${d.key}';renderScore()">
-      <div class="e">${dimEmo(d.key)}</div><div class="v">${STATE.points[d.key]||0}</div>
+      <div class="e">${dimEmo(d.key)}</div><div class="v">${v}</div>
     </div>`;
   }).join('')+`</div>`;
   // 维度标签栏（恢复：胶囊样式，选中深色）
@@ -744,16 +884,21 @@ function renderScore(){
   const dm=RULES.dim.find(d=>d.key===curDim);
   const items=RULES.items.filter(i=>i.dim===curDim);
   const kid=ME.role==='kid';
-  const head=`<div class="sec-head"><span class="e">${dimEmo(dm.key)}</span><div><div class="t">${dimName(dm)}</div><div class="s">${dm.type==='品质'?'品质层 · 鼓励为主 · 非强制':'习惯层 · 计分维度'}</div></div></div>`;
+  const head=`<div class="sec-head"><span class="e">${dimEmo(dm.key)}</span><div><div class="t">${dimName(dm)}</div><div class="s">${layerLabel(dm)}</div></div></div>`;
   // 任务卡：与扣分页一致的图文卡网格
   const grid=`<div class="grid">`+items.map(it=>{
-    const cap=parseCap(it.freq); const used=usedOf(it); const remain=cap?cap.max-used:Infinity;
+    const cap=guest?null:parseCap(it.freq); const used=guest?0:usedOf(it); const remain=cap?cap.max-used:Infinity;
     const full=remain<=0;
-    const noPerm=!canDeclare();
-    const capTxt=cap?`已用 ${used}/${cap.max}${capUnit(it.freq)}`:'';
-    let click, tag, hint;
+    const noPerm=guest?false:!canDeclare();
+    const capTxt=guest?'':(cap?`已用 ${used}/${cap.max}${capUnit(it.freq)}`:'');
+    let click, tag, hint, faded='';
     const parts=(...arr)=>arr.filter(Boolean).join(' · ');
-    if(kid){
+    if(guest){
+      click=`guestHint()`;
+      tag=`<span class="tag">+${it.score} 金币</span>`;
+      hint=parts(it.freq, it.desc||it.eg);
+      faded=' faded';
+    } else if(kid){
       click=`openDetailItem('${it.name}')`;
       tag=`<span class="tag">+${it.score} 金币</span>`;
       hint=parts(capTxt, it.desc||it.eg||'点卡片请大人帮你加分');
@@ -761,31 +906,34 @@ function renderScore(){
       click=`toast('今日已达上限，明天继续加油 💪')`;
       tag=`<span class="tag gray">今日已达上限</span>`;
       hint=parts(it.desc, it.eg);
+      faded=' faded';
     } else if(noPerm){
       click=`toast('当前账号暂无申报权限，请联系管理员开启')`;
       tag=`<span class="tag gray">暂无申报权限</span>`;
       hint=parts(it.desc, it.eg);
+      faded=' faded';
     } else {
       click=`openScoreByName('${it.name}')`;
       tag=`<span class="tag">+${it.score} 金币</span>`;
       hint=parts(capTxt, it.freq, it.desc, it.eg);
     }
-    return `<div class="gcard ${(!kid&&(full||noPerm))?'faded':''}" onclick="${click}">
+    return `<div class="gcard${faded}" onclick="${click}">
       <div class="e">${emoFor(it.name)}</div>
       <div class="n">${it.name}</div>
       ${tag}
       <div class="hint">${hint}</div>
     </div>`;
   }).join('')+`</div>`;
-  box.innerHTML=strip+tabs+head+grid;
+  box.innerHTML=guestTop()+strip+tabs+head+grid;
 }
 
 /* ============ 扣分视图 ============ */
 function renderDeduct(){
   const box=document.getElementById('view-deduct'); if(!STATE)return;
-  box.innerHTML=`<div class="sec-title"><span class="dot" style="background:#EF4444"></span>温柔提醒 · 扣回少量金币</div>
-    <div class="grid">`+RULES.deduct.map(d=>{
-      return `<div class="gcard" onclick="openDetailDeduct('${d.name}')">
+  const guest=GUEST;
+  box.innerHTML=guestTop()+`<div class="sec-title"><span class="dot" style="background:#EF4444"></span>温柔提醒 · 扣回少量金币</div>
+    <div class="grid">`+(RULES.deduct||[]).map(d=>{
+      return `<div class="gcard${guest?' faded':''}" onclick="${guest?'guestHint()':`openDetailDeduct('${d.name}')`}">
         <div class="e">${d.icon}</div>
         <div class="n">${d.name}</div>
         <span class="tag red">${d.score} 金币</span>
@@ -798,6 +946,20 @@ function renderDeduct(){
 /* ============ 兑换视图 ============ */
 function renderExchange(){
   const box=document.getElementById('view-exchange'); if(!STATE)return;
+  const guest=GUEST;
+  // 游客模式：仅展示心愿分类与金币区间，隐藏具体心愿内容与余额
+  if(guest){
+    let html=guestTop()+`<div class="sec-title"><span class="dot" style="background:var(--gold)"></span>心愿兑换（游客仅可见分类与金币区间）</div>`;
+    (RULES.exchange||[]).forEach(g=>{
+      const costs=g.items.map(i=>i.cost); const lo=Math.min(...costs), hi=Math.max(...costs);
+      html+=`<div class="sec-title" style="margin-top:6px;"><span class="dot" style="background:var(--gold)"></span>${g.tier}</div>
+        <div class="guide-card" style="margin:0 12px 8px;">
+          <p style="margin:0;font-size:14px;font-weight:700;">金币区间：${lo} ~ ${hi} 枚</p>
+          <p style="margin:4px 0 0;font-size:12px;color:var(--sub);">共 ${g.items.length} 项心愿，具体内容已对游客隐藏 🔒</p>
+        </div>`;
+    });
+    box.innerHTML=html; return;
+  }
   const reward=nextReward();
   let html=`<div class="hero">
     <div class="title">💰 我的金币余额</div>
@@ -806,7 +968,7 @@ function renderExchange(){
     <div class="progress"><i style="width:${exchangeProgress(reward.cost)}%"></i></div>
     <div class="meta"><span>目标：${reward.name}</span><span>${exchangeProgress(reward.cost)}%</span></div>
   </div>`;
-  RULES.exchange.forEach(g=>{
+  (RULES.exchange||[]).forEach(g=>{
     html+=`<div class="sec-title"><span class="dot" style="background:var(--gold)"></span>${g.tier}</div><div class="goal-list">`;
     g.items.forEach(it=>{
       const ok=STATE.total>=it.cost;
@@ -823,7 +985,7 @@ function renderExchange(){
     html+=`<div class="sec-title"><span class="dot" style="background:var(--gold)"></span>兑换记录</div><div class="list">`+STATE.exchanges.map(x=>{
       const stxt=x.status==='approved'?'已批准':x.status==='rejected'?'已驳回':'待审批';
       const scol=x.status==='approved'?'#16A34A':x.status==='rejected'?'#DC2626':'#A16207';
-      return `<div class="rec"><div class="t">🎁 ${x.name} <span style="color:${scol};">${x.cost} 金币</span></div><div class="op">申请人 ${x.applicant} · ${x.ts} · ${stxt}${x.approver?' · 审批：'+x.approver:''}</div></div>`;
+      return `<div class="rec"><div class="t">🎁 ${x.name} <span style="color:${scol};">${x.cost} 金币</span></div><div class="op">申请人 ${x.applicant} · ${fmtTS(x.ts)} · ${stxt}${x.approver?' · 审批：'+x.approver:''}</div></div>`;
     }).join('')+`</div>`;
   }
   box.innerHTML=html;
@@ -837,7 +999,7 @@ function renderRecords(){
   // 宝宝提醒（仅家长可见）
   if(ME.role!=='kid' && STATE.reminders && STATE.reminders.length){
     html+=`<div class="remind-box"><h4>🌟 宝宝提醒 · 等你确认</h4>`+STATE.reminders.map(rm=>{
-      return `<div class="remind-item"><span class="ic">${emoFor(rm.item)}</span><div class="nm">${rm.item}</div><div class="op" style="font-size:11px;color:var(--sub);margin-left:auto;padding-right:8px;">${rm.ts}</div><button onclick="openScoreByName('${rm.item.replace(/'/g,"\\'")}')">去加分</button><button style="background:#E5E7EB;color:#374151;margin-left:4px;" onclick="dismissRemind(${rm.id})">忽略</button></div>`;
+      return `<div class="remind-item"><span class="ic">${emoFor(rm.item)}</span><div class="nm">${rm.item}</div><div class="op" style="font-size:11px;color:var(--sub);margin-left:auto;padding-right:8px;">${fmtTS(rm.ts)}</div><button onclick="openScoreByName('${rm.item.replace(/'/g,"\\'")}')">去加分</button><button style="background:#E5E7EB;color:#374151;margin-left:4px;" onclick="dismissRemind(${rm.id})">忽略</button></div>`;
     }).join('')+`</div>`;
   }
   let list=STATE.records.slice();
@@ -845,11 +1007,23 @@ function renderRecords(){
   else if(recFilter!=='全部') list=list.filter(r=>recFilter==='扣分'?r.dim==='扣分':r.dim===recFilter);
   if(!list.length){ html+='<div class="empty">该分类还没有记录</div>'; box.innerHTML=html; return; }
   html+='<div class="list">'+list.map(r=>{
+    if(r.void){
+      const sc=r.type==='sub'?`-${Math.abs(r.score)}`:`+${r.score}`;
+      return `<div class="rec" style="opacity:.6;">
+        <div class="t" style="text-decoration:line-through;">${emoFor(r.item)} ${r.item} <span style="color:#9CA3AF;">${sc}</span></div>
+        <div class="d">${r.reason||''}</div>
+        <div class="op">🕒 ${fmtTS(r.ts)} · 操作人 ${r.operator} · ${r.dim}</div>
+        <span class="tag sub">已撤销</span>
+        <div class="op" style="margin-top:4px;">↩️ 撤销人 ${r.voidBy||'—'} · ${r.voidAt||'—'}</div>
+      </div>`;
+    }
     const tag=r.type==='sub'?'<span class="tag sub">已扣除</span>':r.status==='confirmed'?'<span class="tag add">已确认</span>':r.status==='rejected'?'<span class="tag sub">已驳回</span>':'<span class="tag pending">待确认</span>';
+    const canUndo=ME.role==='admin'&&!r.void;
     const ops=(ME.role==='admin'&&r.status==='pending')?`<div class="mini"><button class="ok" onclick="confirmRec(${r.id})">确认</button><button class="no" onclick="rejectRec(${r.id})">驳回</button></div>`:'';
+    const undo=canUndo?`<button class="undo-btn" onclick="undoRec(${r.id})">↩️ 撤销</button>`:'';
     const appr=r.approver?` · 审批：${r.approver}`:''; const qty=(r.qty&&r.qty>1)?` ×${r.qty}`:'';
     const sc=r.type==='sub'?`<span style="color:#DC2626">${r.score}</span>`:`<span style="color:#16A34A">+${r.score}${qty}</span>`;
-    return `<div class="rec"><div class="t">${emoFor(r.item)} ${r.item} ${sc}</div><div class="d">${r.reason}</div><div class="op">🕒 ${r.ts} · 操作人 ${r.operator} · ${r.dim}${appr}</div>${tag}${ops}</div>`;
+    return `<div class="rec"><div class="t">${emoFor(r.item)} ${r.item} ${sc}</div><div class="d">${r.reason}</div><div class="op">🕒 ${fmtTS(r.ts)} · 操作人 ${r.operator} · ${r.dim}${appr}</div>${tag}${ops}${undo}</div>`;
   }).join('')+'</div>';
   box.innerHTML=html;
 }
@@ -857,14 +1031,15 @@ function renderRecords(){
 /* ============ 孩子视图 ============ */
 function renderKid(){
   const box=document.getElementById('view-kid'); if(!STATE)return;
-  const gained=totalGained(), lost=totalDeducted(), exchanged=totalExchanged(), pendingEx=totalPendingEx();
-  const flames=Math.min(10,Math.floor((STATE.points['勇气']||0)/3));
+  const guest=GUEST;
+  const gained=guest?0:totalGained(), lost=guest?0:totalDeducted(), exchanged=guest?0:totalExchanged(), pendingEx=guest?0:totalPendingEx();
+  const flames=guest?0:Math.min(10,Math.floor((STATE.points['勇气']||0)/3));
   const reward=nextReward();
-  let html=`<div class="hero">
+  let html=guestTop()+`<div class="hero">
     <div class="title">🦸 我是最棒的小超人</div>
-    <div class="big">${STATE.total}</div>
-    <div class="sub">我的成长金币 · 离「${reward.name}」还差 ${Math.max(0,reward.cost-STATE.total)} 金币</div>
-    <div class="progress"><i style="width:${exchangeProgress(reward.cost)}%"></i></div>
+    <div class="big">${guest?0:STATE.total}</div>
+    <div class="sub">${guest?'游客模式 · 当前分值已隐藏':'我的成长金币 · 离「'+reward.name+'」还差 '+Math.max(0,reward.cost-STATE.total)+' 金币'}</div>
+    <div class="progress"><i style="width:${guest?0:exchangeProgress(reward.cost)}%"></i></div>
   </div>
   <div class="kid-stats">
     <div class="kstat"><div class="v" style="color:#16A34A">${gained}</div><div class="l">累计获得</div></div>
@@ -873,23 +1048,28 @@ function renderKid(){
   </div>
   <div class="kid-stats" style="margin-top:8px;">
     <div class="kstat"><div class="v" style="color:#8B5CF6">${pendingEx}</div><div class="l">待审批预扣</div></div>
-    <div class="kstat" style="grid-column:span 2;"><div class="v" style="color:#6366F1">${STATE.total}</div><div class="l">可用余额</div></div>
+    <div class="kstat" style="grid-column:span 2;"><div class="v" style="color:#6366F1">${guest?0:STATE.total}</div><div class="l">可用余额</div></div>
   </div>
   <div class="flame-box">
     <div class="t">🔥 勇气火焰星（做到了就点亮，不强求）</div>
     <div class="stars">${'🔥'.repeat(flames)+'░'.repeat(10-flames)}</div>
   </div>
-  <div class="sec-title"><span class="dot" style="background:var(--gold)"></span>我想换的奖励</div>
-  <div class="goal-list">`;
-  let all=[]; RULES.exchange.forEach(g=>g.items.forEach(i=>all.push(i)));
-  all.slice(0,5).forEach(it=>{
-    const ok=STATE.total>=it.cost;
-    html+=`<div class="goal-card"><div class="row"><div class="nm">${it.name}</div><div class="cost">${it.cost} 金币</div></div>
-      <div class="bar"><i style="width:${exchangeProgress(it.cost)}%"></i></div>
-      <button class="btn" ${ok?'':'disabled style="opacity:.5;background:#9CA3AF;"'} onclick="openExchange('${it.name}',${it.cost})">我要换</button>
-    </div>`;
-  });
-  html+=`</div><div class="guide-card" style="margin-bottom:20px;"><p style="margin:0;font-size:13px;line-height:1.6;">做完一件好事，可以点开上面的卡片叫大人来帮你加分。金币=累计获得−累计扣除−已兑换−待审批，余额是当前能用的金币。</p></div>`;
+  <div class="sec-title"><span class="dot" style="background:var(--gold)"></span>我想换的奖励</div>`;
+  if(guest){
+    html+=`<div class="guide-card" style="margin:0 12px 8px;"><p style="margin:0;font-size:13px;">心愿内容已对游客隐藏 🔒</p></div>`;
+  } else {
+    html+=`<div class="goal-list">`;
+    let all=[]; (RULES.exchange||[]).forEach(g=>g.items.forEach(i=>all.push(i)));
+    all.slice(0,5).forEach(it=>{
+      const ok=STATE.total>=it.cost;
+      html+=`<div class="goal-card"><div class="row"><div class="nm">${it.name}</div><div class="cost">${it.cost} 金币</div></div>
+        <div class="bar"><i style="width:${exchangeProgress(it.cost)}%"></i></div>
+        <button class="btn" ${ok?'':'disabled style="opacity:.5;background:#9CA3AF;"'} onclick="openExchange('${it.name}',${it.cost})">我要换</button>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+  html+=`<div class="guide-card" style="margin-bottom:20px;"><p style="margin:0;font-size:13px;line-height:1.6;">做完一件好事，可以点开上面的卡片叫大人来帮你加分。金币=累计获得−累计扣除−已兑换−待审批，余额是当前能用的金币。</p></div>`;
   box.innerHTML=html;
 }
 
@@ -916,9 +1096,24 @@ function renderAdmin(){
     const tag=a.role==='admin'?' 👑':a.role==='kid'?' 🧒':'';
     return `<div class="admin-row"><div class="nm">${a.name}${tag}</div>${isElder?`<button class="${has?'btn-primary':'btn-ghost'}" onclick="toggleDim('${a.id}','学习')">学习直接加分${has?'✓':''}</button>`:''}<button class="btn-ghost" onclick="resetPin('${a.id}')">重置密码</button></div>`;
   }).join('')}</div></div>`;
+  html+=`<div class="admin-card"><h4>📊 导出得分报表</h4><p>把当前所有加分/扣分记录导出成表格（CSV，Excel / Numbers / WPS 都能打开）</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center;">
+      <select id="repDim" style="padding:8px;border-radius:10px;border:1px solid var(--line);">
+        <option value="">全部维度</option>${RULES.dim.map(d=>`<option value="${d.key}">${d.name}</option>`).join('')}
+      </select>
+      <button class="btn-primary" onclick="exportCSV()">⬇️ 导出 CSV</button>
+    </div></div>`;
+  html+=`<div class="admin-card"><h4>🃏 计分卡管理（数据驱动）</h4><p>可增删改项目、调整分值/频次；改动立即对全家生效，<b>无需重新部署</b>，历史记录不受影响。妈妈为最高权限，可查看全部修改记录。</p>
+    <div id="rulesEditor" style="margin:8px 0;"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn-primary" onclick="addRuleItem()">➕ 新增项目</button>
+      <button class="btn-ghost" onclick="saveRules()">💾 保存计分卡</button>
+      <button class="btn-ghost" onclick="viewAudit()">📜 查看修改记录</button>
+      <button class="btn-ghost" onclick="restoreDefaultItems()" style="border-color:#A855F7;color:#A855F7;">🛠 恢复缺失的默认项目</button>
+    </div></div>`;
   if(MODE==='server'){
     html+=`<div class="admin-card"><h4>💾 数据备份与恢复</h4>
-      <p>服务器会自动每天备份一次（保留最近 7 天）。建议每周点一次「导出备份」，把文件存到手机或电脑里；万一数据丢失，用「导入备份」一键恢复。</p>
+      <p>系统自动滚动备份（最近 1 小时），也可手动导出完整备份（含密码与全部记录）。建议每周导出一次存手机；万一数据异常，用「导入备份」合并恢复。</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
         <button class="btn-primary" onclick="exportData()">⬇️ 导出备份</button>
         <button class="btn-ghost" onclick="document.getElementById('importFile').click()">⬆️ 导入备份</button>
@@ -926,15 +1121,15 @@ function renderAdmin(){
       <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)">
     </div>`;
   }
-  box.innerHTML=html;
+  box.innerHTML=html; rulesEditorRender();
 }
 
 /* ============ 数据备份：导出 / 导入 ============ */
-function stampNow(){ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
+function stampNow(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); }
 async function exportData(){
   try{
     const d=await call('/api/export');
-    const blob=new Blob([JSON.stringify({ exportedAt:d.exportedAt, state:d.state },null,2)],{type:'application/json'});
+    const blob=new Blob([JSON.stringify({ exportedAt:d.exportedAt, state:d.state, accounts:d.accounts, rules:d.rules, audit:d.audit },null,2)],{type:'application/json'});
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
     a.download='椰子小超人银行-备份-'+stampNow()+'.json';
@@ -950,36 +1145,178 @@ async function importData(input){
     const j=JSON.parse(txt);
     const s=(j&&j.state)?j.state:j;
     if(!s||typeof s.total!=='number'||!Array.isArray(s.records)) throw new Error('这不是本系统的备份文件');
-    if(!confirm('导入会覆盖服务器上的全部数据。\n当前总分：'+STATE.total+' 分\n备份总分：'+s.total+' 分（'+s.records.length+' 条记录）\n确定要恢复这份备份吗？')){ input.value=''; return; }
-    const r=await call('/api/import',{state:s});
+    if(!confirm('将恢复备份中的密码，并把备份记录与当前记录合并（不覆盖现有数据）。\n当前总分：'+STATE.total+' 分\n备份总分：'+s.total+' 分（'+s.records.length+' 条记录）\n确定要合并恢复吗？')){ input.value=''; return; }
+    const r=await call('/api/import',{state:s, accounts:j.accounts});
     await fetchState(); renderAll(); renderAdmin();
     toast('已恢复 ✅ 当前总分 '+r.total+' 分');
   }catch(e){ toast('导入失败：'+e.message); }
   input.value='';
 }
 
-/* ============ 家长须知 ============ */
-function guideHTML(){
-  return `<div class="guide-card"><h3>📖 家长须知 · 设计理念</h3>
-    <p><span class="num">1</span><b>正强化为主、扣分为辅：</b>心理学（斯金纳）表明，及时、具体的奖励比惩罚更能塑造行为。加分项远多于扣分项，且扣分项分值小、不带羞辱，目的是「温和提醒」而非惩罚。</p>
-    <p><span class="num">2</span><b>普雷马克原理（祖母法则）：</b>用孩子喜欢的活动（看动画、去公园）去强化不太喜欢的活动（自理、学习）。奖励清单由孩子和大人一起商量定，提升自主感（自我决定理论）。</p>
-    <p><span class="num">3</span><b>小步子 + 高频反馈：</b>7岁孩子需要「够得着」的目标。小奖励（10-20金币）当天就能换，中奖励（30-50）周末可换，大奖励（80-120）需存钱——练延迟满足（棉花糖实验）。</p>
-    <p><span class="num">4</span><b>具体表扬 + 成长型思维：</b>加分时多说「你今天自己整理了书包，真负责！」夸努力和品格，而非「你真聪明」，帮孩子相信能力可练出来（德韦克）。</p>
-    <p><span class="num">5</span><b>稳定可预期：</b>同样的任务每天分值一样，规矩清晰孩子才有安全感；每周可开「家庭小会」微调清单。</p>
-    <p><span class="num">6</span><b>防过度外在奖励：</b>孩子本来就爱的事（如画画）不必给分，保留内在兴趣，避免「过度辩证效应」。</p>
+/* ============ 游客只读 / 撤销 / 报表 / 计分卡管理（2.2~2.6） ============ */
+let GUEST_STATE=null, editRules=null;
+async function guestEnter(){
+  GUEST=true; ME={role:'guest',name:'游客'};
+  // 游客不加载任何真实数据：用空壳 STATE，所有敏感数值在渲染层遮罩
+  STATE={points:{},total:0,records:[],exchanges:[],reminders:[],carer:'爸妈'};
+  document.getElementById('login').style.display='none';
+  document.getElementById('roleChip').textContent='游客';
+  document.getElementById('roleChip').className='rolechip';
+  document.getElementById('navAdmin').classList.add('hidden');
+  document.querySelectorAll('.nav a').forEach(a=>{ a.style.display = (a.dataset.v==='records'||a.dataset.v==='admin')?'none':''; });
+  navTo('score');
+}
+// 游客点击卡片时的提示（仅浏览，不可操作）
+function guestHint(){ toast('游客模式仅可浏览，如需操作请用家人账号登录'); }
+// 游客模式顶部提示横幅（各浏览页统一显示，提醒数值已隐藏）
+function guestTop(){ return GUEST?`<div style="margin:10px 12px 0;padding:10px 12px;border-radius:12px;background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;font-size:13px;font-weight:600;line-height:1.5;">👁️ 游客模式 · 仅可浏览，敏感分值、心愿内容与家庭隐私已做隐藏</div>`:''; }
+function renderGuest(){
+  const box=document.getElementById('view-guest'); if(!box)return;
+  let p;
+  if(GUEST_STATE&&GUEST_STATE.public) p=GUEST_STATE.public;
+  else if(MODE==='local'&&STATE) p={points:STATE.points||{},total:STATE.total||0,carer:STATE.carer||'爸妈',recent:(STATE.records||[]).filter(r=>r.status==='confirmed').slice(0,20)};
+  else p={points:{},total:0,recent:[]};
+  let html=`<div class="hero"><div class="title">🌴 椰子小超人银行 · 游客浏览</div><div class="big">${p.total}</div><div class="sub">成长金币总数（只读）</div></div>`;
+  html+=`<div class="sec-title"><span class="dot" style="background:var(--gold)"></span>各维度得分</div><div class="grid">`+
+    RULES.dim.map(d=>`<div class="gcard"><div class="emo">${dimEmo(d.key)}</div><div class="nm">${d.name}</div><div class="score">${(p.points&&p.points[d.key])||0}</div></div>`).join('')+`</div>`;
+  html+=`<div class="sec-title"><span class="dot" style="background:var(--red)"></span>近期记录</div><div class="list">`+
+    ((p.recent&&p.recent.length)?p.recent.map(r=>`<div class="rec"><div class="t">${emoFor(r.item)} ${r.item} ${r.type==='sub'?'<span style="color:#DC2626">'+r.score+'</span>':'<span style="color:#16A34A">+'+r.score+'</span>'}</div><div class="op">🕒 ${fmtTS(r.ts)} · ${r.dim}</div></div>`).join(''):'<div class="empty">暂无记录</div>')+`</div>`;
+  html+=`<div class="guide-card"><p style="margin:0 0 10px;font-size:13px;line-height:1.6;">游客仅可浏览概览，不能加分、扣分、兑换或查看家人隐私。如需操作，请返回用家人账号登录。</p><button class="btn" onclick="logout()">返回登录</button></div>`;
+  box.innerHTML=html;
+}
+async function undoRec(id){
+  if(!confirm('确定撤销这条记录吗？对应积分会回滚。'))return;
+  try{ const d=await call('/api/undo',{recId:id}); STATE=d.state; renderAll(); renderAdmin(); toast('已撤销 ✅'); }
+  catch(e){ toast('撤销失败：'+e.message); }
+}
+function exportCSV(){
+  if(!STATE)return;
+  const dim=document.getElementById('repDim')?document.getElementById('repDim').value:'';
+  const rows=STATE.records.filter(r=>!r.void&&(!dim||r.dim===dim));
+  const head=['时间','维度','项目','分值','类型','状态','操作人','说明'];
+  const esc=s=>'"'+String(s==null?'':s).replace(/"/g,'""').replace(/\n/g,' ')+'"';
+  const lines=[head.map(esc).join(',')];
+  rows.forEach(r=>lines.push([fmtTS(r.ts),r.dim,r.item,(r.type==='sub'?'':'+')+r.score,r.type==='sub'?'扣分':'加分',r.status,r.operator||'',r.reason||''].map(esc).join(',')));
+  const csv='﻿'+lines.join('\r\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='积分报表-'+stampNow()+'.csv';
+  document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(),1500);
+  toast('报表已导出 ✅（'+rows.length+' 条）');
+}
+function rulesEditorRender(){
+  if(!editRules)editRules=JSON.parse(JSON.stringify(RULES));
+  const box=document.getElementById('rulesEditor'); if(!box)return;
+  box.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;">`+
+    editRules.items.map((it,i)=>`<div style="display:flex;gap:6px;align-items:center;">
+      <input class="ri-name" data-i="${i}" value="${escAttr(it.name)}" placeholder="项目名称" style="flex:2;min-width:80px;padding:6px;border-radius:8px;border:1px solid var(--line);">
+      <select class="ri-dim" data-i="${i}" style="padding:6px;border-radius:8px;border:1px solid var(--line);">${editRules.dim.map(d=>`<option value="${d.key}" ${d.key===it.dim?'selected':''}>${d.name}</option>`).join('')}</select>
+      <input class="ri-score" data-i="${i}" value="${escAttr(it.score)}" placeholder="分值" style="width:64px;padding:6px;border-radius:8px;border:1px solid var(--line);">
+      <input class="ri-freq" data-i="${i}" value="${escAttr(it.freq||'')}" placeholder="频次" style="flex:1.4;min-width:80px;padding:6px;border-radius:8px;border:1px solid var(--line);">
+      <button onclick="delRuleItem(${i})" style="border:none;background:#FEE2E2;color:#DC2626;border-radius:8px;padding:6px 8px;">🗑️</button>
+    </div>`).join('')+`</div>`;
+  box.querySelectorAll('.ri-name').forEach(e=>e.oninput=()=>editRules.items[e.dataset.i].name=e.value);
+  box.querySelectorAll('.ri-dim').forEach(e=>e.onchange=()=>editRules.items[e.dataset.i].dim=e.value);
+  box.querySelectorAll('.ri-score').forEach(e=>e.oninput=()=>editRules.items[e.dataset.i].score=e.value);
+  box.querySelectorAll('.ri-freq').forEach(e=>e.oninput=()=>editRules.items[e.dataset.i].freq=e.value);
+}
+function escAttr(s){ return String(s==null?'':s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function addRuleItem(){ if(!editRules)editRules=JSON.parse(JSON.stringify(RULES)); editRules.items.push({dim:'学习',name:'新项目',score:'1',mode:'固定',freq:'每日1次'}); rulesEditorRender(); }
+function delRuleItem(i){ editRules.items.splice(i,1); rulesEditorRender(); }
+function saveRules(){
+  if(!editRules)return;
+  if(!editRules.items.length){ toast('计分卡不能为空'); return; }
+  // 关键：上传完整规则（只替换 items），否则 deduct/exchange 会丢失导致扣分页/兑换页崩溃
+  call('/api/rules/save',{rules:Object.assign({},RULES,{items:editRules.items})}).then(()=>{
+    RULES=Object.assign({},RULES,{items:JSON.parse(JSON.stringify(editRules.items))}); renderAll(); renderAdmin(); toast('计分卡已保存 ✅');
+  }).catch(e=>toast('保存失败：'+e.message));
+}
+// 恢复缺失的默认项目：把出厂计分卡里被误删的项目（如勇气类卡片）和扣分卡/兑换清单补回来，自定义项目保留
+function mergeDefaultRules(){
+  const base=JSON.parse(JSON.stringify(EMBED_RULES));
+  const merged=Object.assign({},RULES);
+  if(!Array.isArray(merged.dim)||!merged.dim.length) merged.dim=base.dim;
+  if(!Array.isArray(merged.items)) merged.items=[];
+  if(!Array.isArray(merged.deduct)||!merged.deduct.length) merged.deduct=base.deduct;
+  if(!Array.isArray(merged.exchange)||!merged.exchange.length) merged.exchange=base.exchange;
+  // 维度也要补全：否则补回的项目会因「所属维度不存在」保存失败
+  const dk=new Set(merged.dim.map(d=>d.key));
+  merged.dim=merged.dim.concat(base.dim.filter(d=>!dk.has(d.key)));
+  const have=new Set(merged.items.map(i=>i.name));
+  merged.items=merged.items.concat(base.items.filter(i=>!have.has(i.name)));
+  return merged;
+}
+async function restoreDefaultItems(){
+  if(!confirm('将把出厂计分卡里缺失的项目（如勇气类的「学校举手/朗读/竞选」等）以及扣分卡、兑换清单补回来；你自己新增/修改过的项目会保留。确定吗？'))return;
+  RULES=mergeDefaultRules();
+  try{
+    await call('/api/rules/save',{rules:RULES});
+    editRules=null; // 让计分卡编辑器重新读取最新规则，避免显示旧缓存
+    renderAll(); renderAdmin(); toast('已恢复缺失的默认项目 ✅');
+  }catch(e){ toast('恢复失败：'+e.message); }
+}
+async function viewAudit(){
+  try{
+    const d=await call('/api/rules/log'); const list=d.audit||[];
+    const html=list.length?list.map(a=>`<div class="rec"><div class="t">${a.actor} · ${a.action}</div><div class="op">🕒 ${fmtTS(a.ts)}</div><div class="d">${a.detail}</div></div>`).join(''):'<div class="empty">暂无修改记录</div>';
+    showModal('计分卡修改记录（妈妈可查全部）', html);
+  }catch(e){ toast('获取失败：'+e.message); }
+}
+function showModal(title,bodyHtml){
+  const m=document.createElement('div'); m.className='modal-mask2';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  const card=document.createElement('div');
+  card.style.cssText='background:#fff;border-radius:18px;max-width:440px;width:100%;max-height:80vh;overflow:auto;padding:18px;';
+  card.innerHTML=`<div style="font-weight:900;font-size:17px;margin-bottom:10px;">${title}</div><div style="font-size:13px;line-height:1.7;">${bodyHtml}</div><button style="margin-top:14px;width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(90deg,#F59E0B,#EF4444);color:#fff;font-weight:800;" onclick="this.closest('.modal-mask2').remove()">关闭</button>`;
+  m.appendChild(card); m.onclick=e=>{ if(e.target===m)m.remove(); };
+  document.body.appendChild(m);
+}
+
+/* ============ 家长须知（致家里每一位大人） ============ */
+// 日常 5 个提醒：guest=true 时只保留粗体标题，隐藏具体说明（隐私保护）
+function remindersBlock(guest){
+  const items=[
+    ['a','情绪优先于积分：','如果孩子正在哭、发脾气、明显受挫，请先拥抱和共情，这一刻不要扣分、也不要急着加分。情绪稳定后，再回顾"刚才哪里可以做得更好"。'],
+    ['b','睡眠和运动是根基：','起床拖拉、注意力不集中，先检查昨晚睡了多久、今天有没有跑跳够。很多"行为问题"其实是身体信号。'],
+    ['c','勇气不能靠施压：','害羞、不敢当众发言、没竞选班干部，这些都是孩子当下的真实状态。我们可以创造安全的小机会鼓励他去尝试，但不要为了"得分"而逼他，更不要扣分。'],
+    ['d','保留内在兴趣：','像拼积木这种他已经很热爱、很专注的事，不建议事事都加分。积分是辅助，别把天生的热爱变成"为了奖励才做"的交易。'],
+    ['e','每周一次复盘：','全家一起花 5～10 分钟看看本周金币怎么来的、换了什么奖励、下周想挑战哪一项。复盘比分数更重要。'],
+  ];
+  return `<div class="guide-card" style="margin-bottom:10px;">
+    <h3>🧭 日常使用的 5 个提醒</h3>`+
+    items.map(([n,b,full])=>`<p><span class="num">${n}</span><b>${b}</b>${guest?'':full}</p>`).join('')+
+    `</div>`;
+}
+function guideHTML(guest){
+  return `<div class="guide-card"><h3>📖 致家里的每一位大人 · 积分银行使用共识</h3>
+    <p style="font-size:12px;color:var(--sub);margin:-4px 0 12px;">（给爸爸、妈妈、外公、外婆、爷爷、奶奶）</p>
+
+    <p><span class="num">1</span><b>我们是一支队伍：</b>椰子小超人银行不是"谁管孩子"的工具，而是<strong>全家统一标准的记事本</strong>。对孩子来说，最困惑的往往不是要求高，而是<strong>家里标准不一</strong>——在父母这里要学着自理，到了长辈那里却被包办代劳，他会茫然"到底该照着谁做"。所以第一条共识是：<strong>规则全家一起定、一起守，谁都不偷偷破例。</strong></p>
+
+    <p><span class="num">2</span><b>科学方法 + 生活经验，本就互补：</b>爸爸妈妈更懂儿童心理与科学方法，知道"先共情再引导""多夸努力少夸聪明"；长辈有更多带孩子的生活阅历，知道孩子什么时候累了、什么小毛病长大就好。二者不冲突：<strong>用科学方法把长辈的经验讲明白，用长辈的威信把科学方法落到实处。</strong>比如长辈在孩子面前有威信，小额加分由他们直接给，既及时又让孩子服气；家人若更习惯"替孩子多做一点"，系统就贴心设计为"先申报、由爸妈确认"，既尊重长辈的心意，也守住了底线的统一。</p>
+
+    <p><span class="num">3</span><b>先看见孩子，再给分：</b>我们的孩子语言表达好、共情能力强，但容易害羞、受挫就想放弃，被夸又容易嘚瑟。积分背后真正要养的，不是分数，而是<strong>"我愿意再试一次"的勇气</strong>。所以每一次加分，请先蹲下来描述他具体做了什么："你自己把积木收回了盒子，这叫负责，+1。"这比"你真棒"管用十倍。</p>
+
+    <p><span class="num">4</span><b>正强化是主菜，扣分只是调味品：</b>操作性条件反射（斯金纳）告诉我们，及时、具体的肯定最能巩固行为。系统里加分项远多于扣分项，扣分也只针对打人、说谎、危险行为等少数底线，分值小、不贴标签，目的是提醒而非羞辱。</p>
+
+    <p><span class="num">5</span><b>用"他喜欢的事"拉动"该做的事"：</b>这就是普雷马克原理（祖母法则）。他爱拼积木、爱和小朋友户外玩，这些不必事事都打分；但可以约定：先把该做的事做完，再痛快地玩。奖励清单建议<strong>每周花 5 分钟和孩子一起修订</strong>，让他有参与感和自主感（自我决定理论）。</p>
+
+    <p><span class="num">6</span><b>小步子、高频反馈，降低受挫感：</b>7 岁孩子的专注力还在发展中，目标要"跳一跳够得着"。小奖励当天就能换，中奖励攒几天，大奖励留到周末或月末。每一次小成功，都在帮他练习延迟满足，也在缓冲"一受挫就放弃"的惯性。</p>
+
+    <p><span class="num">7</span><b>夸努力、夸品格，不夸"聪明"：</b>成长型思维（德韦克）告诉我们，夸"聪明"会让孩子怕失败；夸"努力、负责、坚持"，他才会相信能力可以通过练习变强。对他这样被夸易嘚瑟、受挫易沮丧的孩子，这一点尤其重要。</p>
   </div>
+  ${remindersBlock(guest)}
   <div class="guide-card" style="margin-bottom:20px;">
-    <h3>⚠️ 注意事项与专业边界</h3>
-    <p>• 重过程轻结果；警惕过度外在奖励（配合分值衰减促内化）。</p>
-    <p>• 情绪优先：受挫先共情再引导，绝不此时扣分。</p>
-    <p>• 睡眠优先于拖拉：起床问题先查睡眠总量。</p>
-    <p>• 勇气是礼物不是任务：社交/举手等行为发生时鼓励，不做不施压、不扣分。</p>
-    <p>• ❗ 咨询线下专业信号：持续 2 周以上情绪低落/拒学/严重社交回避；睡眠问题持续数月影响日间；注意力在所有领域明显且持续。建议科室：儿童发育行为儿科 / 儿童心理。</p>
+    <h3>⚠️ 专业边界：什么时候要寻求线下帮助</h3>
+    <p style="font-size:13px;line-height:1.7;margin-bottom:8px;">积分系统只是家庭辅助工具，不能替代专业评估。如果出现以下情况，建议到正规医院<strong>儿童发育行为儿科 / 儿童心理科</strong>咨询：</p>
+    <p>• 持续 2 周以上情绪低落、拒绝上学、严重回避社交；</p>
+    <p>• 睡眠问题持续数月，已经明显影响白天状态；</p>
+    <p>• 注意力涣散、坐不住不仅在家庭里，在学校、兴趣班等所有场合都持续明显；</p>
+    <p>• 打人、说谎等行为反复出现且口头引导完全无效。</p>
+    <p>早发现、早支持，不是给孩子贴标签，而是给他更合适的成长帮助。</p>
   </div>`;
 }
 function renderGuide(){
   const box=document.getElementById('view-guide'); if(!box)return;
-  box.innerHTML=guideHTML();
+  box.innerHTML=guideHTML(GUEST);
 }
 
 /* ============ 规则页：六大板块分值说明 + 家长须知 ============ */
@@ -987,20 +1324,19 @@ function renderRules(){
   const box=document.getElementById('view-rules'); if(!box)return;
   const tabs=['分值说明','家长须知'];
   let html=`<div class="dim-tabs" style="padding-top:10px;">`+tabs.map(t=>`<div class="dim-tab ${rulesTab===t?'on':''}" onclick="rulesTab='${t}';renderRules()">${t}</div>`).join('')+`</div>`;
-  if(rulesTab==='家长须知'){ box.innerHTML=html+guideHTML(); return; }
+  if(rulesTab==='家长须知'){ box.innerHTML=html+guideHTML(GUEST); return; }
   // 分值说明汇总：按六大维度罗列
   html+=RULES.dim.map(d=>{
     const items=RULES.items.filter(i=>i.dim===d.key);
-    return `<div class="sec-head"><span class="e">${dimEmo(d.key)}</span><div><div class="t" style="color:${d.color}">${dimName(d)}</div><div class="s">${d.type==='品质'?'品质层 · 鼓励为主':'习惯层 · 计分维度'} · 共 ${items.length} 项</div></div></div>`
+    return `<div class="sec-head"><span class="e">${dimEmo(d.key)}</span><div><div class="t" style="color:${d.color}">${dimName(d)}</div><div class="s">${layerLabel(d)} · 共 ${items.length} 项</div></div></div>`
       + items.map(it=>`<div class="rule-item" style="background:#fff;border-radius:14px;padding:10px 12px;margin:0 12px 8px;box-shadow:0 2px 8px rgba(0,0,0,.04);">
           <div class="nm">${emoFor(it.name)} ${it.name} <span style="color:#16A34A;">+${it.score}</span></div>
-          <div class="meta">${it.freq||''}${it.op?' · '+it.op:''}</div>
-          ${it.desc?`<div class="desc">${it.desc}</div>`:''}${it.eg?`<div class="desc">例：${it.eg}</div>`:''}
+          <div class="meta">${it.freq||''}${it.op?' · '+it.op:''}</div>${it.desc?`<div class="desc">${it.desc}</div>`:''}${it.eg?`<div class="desc">例：${it.eg}</div>`:''}
         </div>`).join('');
   }).join('');
   // 扣分说明
-  html+=`<div class="sec-head"><span class="e">💧</span><div><div class="t" style="color:#EF4444">温柔扣分</div><div class="s">仅针对少数底线行为 · 共 ${RULES.deduct.length} 项</div></div></div>`
-    + RULES.deduct.map(d=>`<div class="rule-item" style="background:#fff;border-radius:14px;padding:10px 12px;margin:0 12px 8px;box-shadow:0 2px 8px rgba(0,0,0,.04);">
+  html+=`<div class="sec-head"><span class="e">💧</span><div><div class="t" style="color:#EF4444">温柔扣分</div><div class="s">仅针对少数底线行为 · 共 ${(RULES.deduct||[]).length} 项</div></div></div>`
+    + (RULES.deduct||[]).map(d=>`<div class="rule-item" style="background:#fff;border-radius:14px;padding:10px 12px;margin:0 12px 8px;box-shadow:0 2px 8px rgba(0,0,0,.04);">
         <div class="nm">${d.icon||'💧'} ${d.name} <span style="color:#DC2626;">${d.score}</span></div>
         ${d.desc?`<div class="desc">${d.desc}</div>`:''}
       </div>`).join('');
@@ -1010,6 +1346,7 @@ function renderRules(){
 
 /* ============ 详情弹窗 ============ */
 function openDetailItem(name){
+  if(GUEST){ guestHint(); return; }
   const it=RULES.items.find(i=>i.name===name); if(!it)return;
   const cap=parseCap(it.freq); const used=usedOf(it); const remain=cap?cap.max-used:Infinity;
   const authorized=canDeclare();
@@ -1033,7 +1370,8 @@ function openDetailItem(name){
   document.getElementById('detailMask').classList.add('on');
 }
 function openDetailDeduct(name){
-  const d=RULES.deduct.find(x=>x.name===name); if(!d)return;
+  if(GUEST){ guestHint(); return; }
+  const d=(RULES.deduct||[]).find(x=>x.name===name); if(!d)return;
   document.getElementById('detName').textContent=d.name;
   document.getElementById('detDesc').innerHTML=`${d.icon} 扣分：${d.score} 金币<br>${d.desc}`;
   document.getElementById('detBody').innerHTML='';
@@ -1126,7 +1464,7 @@ async function submitExchange(){ const reason=document.getElementById('exReason'
 
 /* ============ 扣分弹窗 ============ */
 let deductReq={name:'',score:0};
-function openDeductByName(name){ const d=RULES.deduct.find(x=>x.name===name); if(!d)return; deductReq={name:d.name,score:d.score};
+function openDeductByName(name){ const d=(RULES.deduct||[]).find(x=>x.name===name); if(!d)return; deductReq={name:d.name,score:d.score};
   document.getElementById('deductName').textContent=d.name; document.getElementById('deductScore').textContent=d.score;
   document.getElementById('deductReason').value=''; document.getElementById('deductMask').classList.add('on'); }
 async function submitDeduct(){ const reason=document.getElementById('deductReason').value.trim();

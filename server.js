@@ -4,26 +4,117 @@
  * 数据存于 ./data/ 目录（state.json 积分状态，accounts.json 账号权限）
  */
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+
+/* ============ 外部持久化：GitHub 私密 Gist（根治免费层临时磁盘重启丢数据） ============
+ * 未配置时自动降级为纯本地模式，不影响任何功能。
+ * 配置方式（Render 环境变量）：GIST_TOKEN=你的GitHub令牌(仅gist权限)  GIST_ID=你的私密gist的ID
+ */
+const GIST_TOKEN = process.env.GIST_TOKEN || '';
+const GIST_ID = process.env.GIST_ID || '';
+const GIST_ON = !!(GIST_TOKEN && GIST_ID);
+const GIST_FILE = 'bank-data.json';
+// 签名 token 密钥（固定即可，重启后旧 token 仍有效）
+const SECRET = process.env.BANK_SECRET || 'coco-bank-2026-secret';
+
+/* ============ 北京时间（UTC+8）工具函数（避免 Render 等服务器默认 UTC 导致显示差 8 小时） ============ */
+const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+function nowCN() { return new Date(Date.now() + TZ_OFFSET_MS); }
+function asCN(d) { return new Date(d.getTime() + TZ_OFFSET_MS); }
+function fmtCN(d = new Date()) {
+  // 输出 ISO 8601 +08:00，例如 2026-09-14T16:59:10+08:00
+  // 既保留精确绝对时间，又明确标注北京时间，跨时区服务器解析不会错
+  const c = asCN(d); const p = n => String(n).padStart(2, '0');
+  return c.getUTCFullYear() + '-' + p(c.getUTCMonth() + 1) + '-' + p(c.getUTCDate()) + 'T' +
+         p(c.getUTCHours()) + ':' + p(c.getUTCMinutes()) + ':' + p(c.getUTCSeconds()) + '+08:00';
+}
+function fileStamp(d = new Date()) {
+  const c = asCN(d); const p = n => String(n).padStart(2, '0');
+  return c.getUTCFullYear() + p(c.getUTCMonth() + 1) + p(c.getUTCDate()) + '-' + p(c.getUTCHours()) + p(c.getUTCMinutes()) + p(c.getUTCSeconds());
+}
+function startOfDayCN(d = new Date()) {
+  const c = asCN(d);
+  return new Date(Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate()) - TZ_OFFSET_MS);
+}
+function sameDayCN(a, b) { return startOfDayCN(a).getTime() === startOfDayCN(b).getTime(); }
+function weekKeyCN(d = new Date()) {
+  const sod = startOfDayCN(d); const c = asCN(d);
+  const dow = (c.getUTCDay() + 6) % 7; // 周一为 0
+  return sod.getTime() - dow * 86400000;
+}
+function samePeriodCN(ts, now, period) {
+  let r;
+  if (typeof ts === 'number') r = new Date(ts);
+  else if (typeof ts === 'string' && (ts.includes('T') || ts.includes('+') || ts.includes('Z'))) r = new Date(ts); // 新 ISO
+  else r = new Date(String(ts) + ' UTC'); // 旧版 locale 字符串按 UTC 解析（旧版在 UTC 服务器生成）
+  if (isNaN(r)) r = new Date();
+  if (period === 'day') return sameDayCN(r, now);
+  if (period === 'week') return weekKeyCN(r) === weekKeyCN(now);
+  return false;
+}
+function migrateLegacyTs(ts) {
+  if (!ts || typeof ts !== 'string') return ts;
+  if (ts.includes('T') || ts.includes('+') || ts.includes('Z')) return ts; // 已为新 ISO
+  const d = new Date(ts + ' UTC');
+  return isNaN(d) ? ts : fmtCN(d);
+}
+function migrateAllTimestamps(obj) {
+  if (!obj || typeof obj !== 'object') return;
+  if (Array.isArray(obj)) { obj.forEach(migrateAllTimestamps); return; }
+  for (const k of Object.keys(obj)) {
+    if ((k === 'ts' || k === 'voidAt' || k === 'exportedAt') && typeof obj[k] === 'string') obj[k] = migrateLegacyTs(obj[k]);
+    else if (typeof obj[k] === 'object') migrateAllTimestamps(obj[k]);
+  }
+}
+
+function gistReq(method, apiPath, body) {
+  return new Promise(resolve => {
+    const data = body ? JSON.stringify(body) : null;
+    const headers = { 'User-Agent': 'coco-bank', 'Authorization': 'token ' + GIST_TOKEN };
+    if (data) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(data); }
+    const req = https.request({ hostname: 'api.github.com', path: apiPath, method, headers }, r => {
+      let d = ''; r.on('data', c => d += c);
+      r.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { resolve(null); } });
+    });
+    req.on('error', () => resolve(null));
+    if (data) req.write(data);
+    req.end();
+  });
+}
+async function pushGist() {
+  if (!GIST_ON) return;
+  const payload = { files: {} };
+  payload.files[GIST_FILE] = { content: JSON.stringify({ accounts, state, rules: RULES, audit }) };
+  gistReq('PATCH', '/gists/' + GIST_ID, payload); // 异步、不阻塞主流程
+}
+async function pullGist() {
+  if (!GIST_ON) return null;
+  const g = await gistReq('GET', '/gists/' + GIST_ID);
+  if (g && g.files && g.files[GIST_FILE]) { try { return JSON.parse(g.files[GIST_FILE].content); } catch (e) { return null; } }
+  return null;
+}
 
 const ROOT = __dirname;
 const DATA = path.join(ROOT, 'data');
 fs.mkdirSync(DATA, { recursive: true });
 const STATE_FILE = path.join(DATA, 'state.json');
 const ACCT_FILE = path.join(DATA, 'accounts.json');
+const CONFIG_FILE = path.join(DATA, 'config.json');
+const AUDIT_FILE = path.join(DATA, 'audit.json');
 const BACKUP_DIR = path.join(DATA, 'backup');
 const PORT = process.env.PORT || 8080;
 
-/* ============ 积分规则（单一事实来源，前端也通过 /api/rules 获取） ============ */
-const RULES = {
+/* ============ 积分规则（单一事实来源，运行时来自 data/config.json，可前端编辑） ============ */
+let RULES = {
   dim: [
     { key: '学习', name: '📘 学习小达人', color: '#3B82F6', type: '习惯' },
     { key: '运动', name: '🏀 运动小健将', color: '#F97316', type: '习惯' },
     { key: '家务', name: '🧺 家务小帮手', color: '#22C55E', type: '习惯' },
     { key: '自理', name: '⏰ 自理小能手', color: '#EAB308', type: '习惯' },
-    { key: '品格', name: '🤝 品格小君子', color: '#A855F7', type: '习惯' },
+    { key: '品格', name: '🤝 品格小君子', color: '#A855F7', type: '品格' },
     { key: '勇气', name: '🦸 勇气小超人', color: '#EF4444', type: '品质' },
   ],
   items: [
@@ -136,7 +227,22 @@ const DEFAULT_ACCOUNTS = [
 
 let accounts = loadJson(ACCT_FILE, DEFAULT_ACCOUNTS);
 let state = loadJson(STATE_FILE, defaultState());
+let audit = loadJson(AUDIT_FILE, []);
+if (!Array.isArray(audit)) audit = [];
+// 规则配置持久化：首次从初始 RULES 写入 config.json，之后以 config 为准（支持前端编辑）
+const DEFAULT_RULES = JSON.parse(JSON.stringify(RULES));
+// 规则自愈：旧版本保存计分卡曾丢失 deduct/exchange，加载后自动补全
+function healRules() {
+  if (!RULES || !Array.isArray(RULES.dim) || !Array.isArray(RULES.items)) { RULES = JSON.parse(JSON.stringify(DEFAULT_RULES)); return; }
+  if (!Array.isArray(RULES.deduct) || !RULES.deduct.length) RULES.deduct = JSON.parse(JSON.stringify(DEFAULT_RULES.deduct));
+  if (!Array.isArray(RULES.exchange) || !RULES.exchange.length) RULES.exchange = JSON.parse(JSON.stringify(DEFAULT_RULES.exchange));
+}
+let cfgRules = loadJson(CONFIG_FILE, null);
+if (!cfgRules) { cfgRules = RULES; saveConfig(); } else { RULES = cfgRules; }
+healRules();
 if (!Array.isArray(state.reminders)) state.reminders = []; // 兼容旧数据
+// 时区迁移：把旧版 UTC locale 时间戳转成北京时间字符串（仅影响显示，总分/排序不变）
+migrateAllTimestamps(state); migrateAllTimestamps(audit);
 // v4 迁移：旧的「日常好习惯」维度按各条目新归属重算到 自理/品格（总分不变）
 if (state.points && ('日常好习惯' in state.points)) {
   const pts = {}; RULES.dim.forEach(d => pts[d.key] = 0);
@@ -147,25 +253,43 @@ if (state.points && ('日常好习惯' in state.points)) {
   }
   state.points = pts; saveState();
 }
-const sessions = {}; // token -> accountId
+// 外部持久化：从 Gist 拉取最新数据（根治免费层临时磁盘重启丢数据），异步、不阻塞启动
+if (GIST_ON) {
+  pullGist().then(d => {
+    if (d && d.state && d.accounts) {
+      accounts = d.accounts; state = d.state;
+      if (d.rules && (Array.isArray(d.rules) || d.rules.items)) { RULES = d.rules; healRules(); }
+      if (Array.isArray(d.audit)) audit = d.audit;
+      if (!Array.isArray(state.reminders)) state.reminders = [];
+      migrateAllTimestamps(state); migrateAllTimestamps(audit);
+      saveState();
+    }
+  }).catch(() => {});
+}
 
 function defaultState() {
   return { points: { 学习: 0, 运动: 0, 家务: 0, 自理: 0, 品格: 0, 勇气: 0 }, total: 0, records: [], exchanges: [], reminders: [], carer: '爸妈' };
 }
 function loadJson(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return def; } }
-function saveState() {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-  // 自动备份：每天一份，最多保留最近 7 份（免费服务器重启可能清空数据，备份可作兜底）
+// 本地滚动备份：文件名含北京时分秒，保留最近 6 份（约 1 小时，每 10 分钟一份），避免占空间
+function backupRolling() {
   try {
     if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    const d = new Date();
-    const stamp = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const stamp = fileStamp(new Date());
     fs.writeFileSync(path.join(BACKUP_DIR, 'state-' + stamp + '.json'), JSON.stringify(state));
-    const files = fs.readdirSync(BACKUP_DIR).filter(f => /^state-\d{8}\.json$/.test(f)).sort();
-    while (files.length > 7) fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => /^state-\d{8}-\d{6}\.json$/.test(f)).sort();
+    while (files.length > 6) fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
   } catch (e) { /* 备份失败不影响主流程 */ }
 }
-function saveAccounts() { fs.writeFileSync(ACCT_FILE, JSON.stringify(accounts, null, 2)); }
+function saveState() { try { fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)); } catch (e) {} backupRolling(); pushGist(); }
+function saveAccounts() { try { fs.writeFileSync(ACCT_FILE, JSON.stringify(accounts, null, 2)); } catch (e) {} pushGist(); }
+function saveConfig() { try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(RULES, null, 2)); } catch (e) {} pushGist(); }
+function saveAudit() { try { fs.writeFileSync(AUDIT_FILE, JSON.stringify(audit, null, 2)); } catch (e) {} pushGist(); }
+function logAudit(actor, action, detail) {
+  audit.unshift({ ts: fmtCN(), actor, action, detail });
+  if (audit.length > 200) audit.length = 200;
+  saveAudit();
+}
 function genOf(acc) {
   if (acc.role === 'admin') return '爸妈';
   if (acc.name.includes('外公') || acc.name.includes('外婆')) return '外公外婆';
@@ -187,20 +311,16 @@ function parseCap(freq) {
   return period ? { period, max } : null;
 }
 function capUnit(freq) { const m = freq && freq.match(/(次|组|页|首)/); return m ? m[1] : '次'; }
-function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function sameDay(a, b) { return startOfDay(a).getTime() === startOfDay(b).getTime(); }
-function weekKey(d) { const day = (d.getDay() + 6) % 7; const mon = new Date(d); mon.setDate(d.getDate() - day); return startOfDay(mon).getTime(); }
-function samePeriod(ts, now, period) { const r = new Date(ts); if (period === 'day') return sameDay(r, now); if (period === 'week') return weekKey(r) === weekKey(now); return false; }
 function usage(itemName, period) {
   const now = new Date();
   return state.records
-    .filter(r => r.item === itemName && r.status !== 'rejected' && samePeriod(r.ts, now, period))
+    .filter(r => r.item === itemName && r.status !== 'rejected' && samePeriodCN(r.ts, now, period))
     .reduce((s, r) => s + (r.qty || 1), 0);
 }
 function usageScore(operatorName, period) {
   const now = new Date();
   return state.records
-    .filter(r => r.type === 'add' && r.status === 'confirmed' && r.operator === operatorName && r.approver === operatorName && samePeriod(r.ts, now, period))
+    .filter(r => r.type === 'add' && r.status === 'confirmed' && r.operator === operatorName && r.approver === operatorName && samePeriodCN(r.ts, now, period))
     .reduce((s, r) => s + r.score, 0);
 }
 
@@ -233,10 +353,17 @@ function send(res, code, obj) {
 function ok(res, obj) { send(res, 200, obj); }
 function err(res, code, msg) { send(res, code, { error: msg }); }
 
+function makeToken(id) {
+  const sig = crypto.createHmac('sha256', SECRET).update(String(id)).digest('hex').slice(0, 16);
+  return Buffer.from(String(id)).toString('base64') + '.' + sig;
+}
 function auth(token) {
-  if (!token) return null;
-  const id = sessions[token];
-  return id ? accounts.find(a => a.id === id) : null;
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  const [b64, sig] = token.split('.');
+  const id = Buffer.from(b64, 'base64').toString();
+  const expect = crypto.createHmac('sha256', SECRET).update(String(id)).digest('hex').slice(0, 16);
+  if (sig !== expect) return null;
+  return accounts.find(a => a.id === id) || null;
 }
 
 /* ============ 静态文件 ============ */
@@ -245,7 +372,8 @@ function serveStatic(req, res, pathname) {
   let f = pathname === '/' ? '/index.html' : pathname;
   const fp = path.join(ROOT, path.normalize(f));
   if (!fp.startsWith(ROOT) || !fs.existsSync(fp) || fs.statSync(fp).isDirectory()) { res.writeHead(404); res.end('Not found'); return; }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream' });
+  // 关键：禁止浏览器缓存页面，避免「打开的还是上次的旧文件」导致登录页身份卡不显示等问题
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream', 'Cache-Control': 'no-store, no-cache, must-revalidate' });
   fs.createReadStream(fp).pipe(res);
 }
 
@@ -270,17 +398,56 @@ const server = http.createServer((req, res) => {
 
     if (p === '/api/rules') return ok(res, RULES);
 
+    // 游客只读视图（无需登录，仅公开概览）
+    if (p === '/api/guest' && method === 'GET') {
+      const recent = state.records.filter(r => !r.void).slice(0, 20).map(r => ({ ts: r.ts, dim: r.dim, item: r.item, score: r.score, status: r.status }));
+      return ok(res, { ok: true, rules: RULES, public: { points: state.points, total: state.total, carer: state.carer, recent } });
+    }
+
     // 登录
     if (p === '/api/login' && method === 'POST') {
       const a = accounts.find(x => x.name === b.name);
       if (!a || a.pin !== String(b.pin || '')) return err(res, 401, '账号或密码错误');
-      const token = crypto.randomBytes(12).toString('hex');
-      sessions[token] = a.id;
+      const token = makeToken(a.id);
       return ok(res, { token, name: a.name, role: a.role, id: a.id, directDims: a.directDims || [], canDeclare: !!a.canDeclare });
     }
 
     const acc = auth(token);
     if (!acc) return err(res, 401, '登录失效，请重新登录');
+
+    // 计分卡：管理员保存（数据驱动，前端可编辑，无需改文件/重部署）
+    if (p === '/api/rules/save' && method === 'POST') {
+      if (acc.role !== 'admin') return err(res, 403, '仅管理员可编辑计分卡');
+      const nr = b.rules;
+      if (!nr || !Array.isArray(nr.dim) || !Array.isArray(nr.items)) return err(res, 400, '计分卡格式不正确');
+      const keys = new Set(nr.dim.map(d => d.key));
+      for (const it of nr.items) if (!keys.has(it.dim)) return err(res, 400, '项目「' + it.name + '」所属维度不存在');
+      const before = JSON.stringify(RULES);
+      RULES = Object.assign({}, RULES, nr); // 合并而非整体替换：deduct/exchange 等未编辑部分必须保留
+      healRules();
+      saveConfig();
+      logAudit(acc.name, '编辑计分卡', before === JSON.stringify(RULES) ? '未变化' : '已更新计分卡配置');
+      return ok(res, { ok: true });
+    }
+    // 计分卡修改审计日志（管理员可查，妈妈为最高权限可查看全部）
+    if (p === '/api/rules/log' && method === 'GET') {
+      if (acc.role !== 'admin') return err(res, 403, '仅管理员可查看');
+      return ok(res, { ok: true, audit: audit.filter(a => a.action === '编辑计分卡') });
+    }
+    // 撤销记录（管理员）：软删除并回滚积分
+    if (p === '/api/undo' && method === 'POST') {
+      if (acc.role !== 'admin') return err(res, 403, '仅管理员可撤销');
+      const r = state.records.find(x => x.id === b.recId);
+      if (!r) return err(res, 404, '记录不存在');
+      if (r.void) return err(res, 400, '该记录已撤销');
+      if (r.status === 'confirmed') {
+        if (r.type === 'add') { state.points[r.dim] = Math.max(0, (state.points[r.dim] || 0) - r.score); state.total = Math.max(0, state.total - r.score); }
+        else if (r.type === 'sub') { state.total = Math.max(0, state.total - r.score); }
+      }
+      r.void = true; r.voidBy = acc.name; r.voidAt = fmtCN();
+      saveState();
+      return ok(res, { ok: true, state });
+    }
 
     if (p === '/api/state' && method === 'GET') return ok(res, state);
 
@@ -317,7 +484,7 @@ const server = http.createServer((req, res) => {
       }
       const rec = {
         id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
-        ts: new Date().toLocaleString('zh-CN'),
+        ts: fmtCN(),
         dim: item.dim, item: item.name, score: totalScore, qty,
         type: 'add', reason: b.reason || '', operator: acc.name,
         status: direct ? 'confirmed' : 'pending', approver: direct ? acc.name : '',
@@ -334,7 +501,7 @@ const server = http.createServer((req, res) => {
     // 宝宝提醒：孩子点击「我做到了」生成，大人可见
     if (p === '/api/remind' && method === 'POST') {
       const id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-      state.reminders.unshift({ id, ts: new Date().toLocaleString('zh-CN'), item: b.item, operator: acc.name, status: 'pending' });
+      state.reminders.unshift({ id, ts: fmtCN(), item: b.item, operator: acc.name, status: 'pending' });
       saveState();
       return ok(res, { ok: true });
     }
@@ -369,7 +536,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/exchange' && method === 'POST') {
       if (state.total < b.cost) return err(res, 400, '积分不足');
       const status = acc.role === 'admin' ? 'approved' : 'pending';
-      const ex = { id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ts: new Date().toLocaleString('zh-CN'), name: b.name, cost: b.cost, applicant: acc.name, status, approver: status === 'approved' ? acc.name : '' };
+      const ex = { id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ts: fmtCN(), name: b.name, cost: b.cost, applicant: acc.name, status, approver: status === 'approved' ? acc.name : '' };
       state.total -= b.cost; // 预扣
       state.exchanges.unshift(ex);
       saveState();
@@ -405,7 +572,7 @@ const server = http.createServer((req, res) => {
       const isAdmin = acc.role === 'admin';
       const rec = {
         id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
-        ts: new Date().toLocaleString('zh-CN'),
+        ts: fmtCN(),
         dim: '扣分', item: d.name, score: d.score, qty: 1,
         type: 'sub', reason: b.reason.trim(), operator: acc.name,
         status: isAdmin ? 'confirmed' : 'pending', approver: isAdmin ? acc.name : '',
@@ -450,26 +617,44 @@ const server = http.createServer((req, res) => {
       return ok(res, { ok: true });
     }
 
-    // 数据备份：导出（仅管理员）
+    // 数据备份：导出（仅管理员）—— 含账号(密码)、规则、审计，便于完整恢复
     if (p === '/api/export' && method === 'GET') {
       if (acc.role !== 'admin') return err(res, 403, '仅管理员可导出数据');
-      return ok(res, { ok: true, exportedAt: new Date().toLocaleString('zh-CN'), state });
+      return ok(res, { ok: true, exportedAt: fmtCN(), state, accounts, rules: RULES, audit });
     }
 
-    // 数据备份：导入恢复（仅管理员）
+    // 数据备份：导入恢复（仅管理员）—— 合并而非覆盖：密码以备份为准恢复，积分记录按 id 去重合并
     if (p === '/api/import' && method === 'POST') {
       if (acc.role !== 'admin') return err(res, 403, '仅管理员可导入数据');
       const s = b.state;
       if (!s || typeof s !== 'object' || typeof s.total !== 'number' || !s.points || !Array.isArray(s.records))
         return err(res, 400, '备份文件格式不正确，请选择本系统导出的备份文件');
-      const prevTotal = state.total;
-      state = s;
-      RULES.dim.forEach(d => { if (typeof state.points[d.key] !== 'number') state.points[d.key] = 0; });
+      // 1) 账号密码以备份为准恢复（解决"导入不能恢复修改后的密码"）
+      if (Array.isArray(b.accounts)) {
+        for (const ba of b.accounts) {
+          const t = accounts.find(x => x.id === ba.id);
+          if (t) { t.pin = String(ba.pin); if (ba.directDims) t.directDims = ba.directDims; if (typeof ba.canDeclare === 'boolean') t.canDeclare = ba.canDeclare; }
+        }
+        saveAccounts();
+      }
+      // 2) 积分记录按 id 去重合并（保留当前历史 + 补入备份中新增的记录）
+      const existing = new Set(state.records.map(r => r.id));
+      let added = 0;
+      for (const r of s.records) if (!existing.has(r.id)) { state.records.unshift(r); added++; }
+      // 3) 以确认记录重算各维度与总分（避免重复累加）
+      const pts = {}; RULES.dim.forEach(d => pts[d.key] = 0); let total = 0;
+      for (const r of state.records) {
+        if (r.status === 'rejected' || r.void) continue;
+        const t = r.type || 'add'; // 旧/手动备份缺 type 时按加分兜底
+        if (t === 'add' && r.status === 'confirmed') { pts[r.dim] = (pts[r.dim] || 0) + r.score; total += r.score; }
+        else if (t === 'sub' && r.status === 'confirmed') { total += r.score; }
+      }
+      state.points = pts; state.total = total;
       if (!Array.isArray(state.reminders)) state.reminders = [];
       if (!Array.isArray(state.exchanges)) state.exchanges = [];
       if (!state.carer) state.carer = '爸妈';
       saveState();
-      return ok(res, { ok: true, total: state.total, records: state.records.length, prevTotal });
+      return ok(res, { ok: true, total: state.total, records: state.records.length, added });
     }
 
     return err(res, 404, '接口不存在');
