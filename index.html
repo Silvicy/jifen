@@ -23,6 +23,8 @@
   .topbar .spacer{flex:1;}
   .tb-sub{display:flex;align-items:center;gap:8px;margin-top:7px;}
   .rolechip{white-space:nowrap;flex-shrink:0;}
+  .fontbtn{display:block;width:100%;margin-top:10px;padding:11px;border:none;border-radius:12px;background:rgba(255,255,255,.9);color:#B45309;font-size:14px;font-weight:800;cursor:pointer;}
+  .fontbtn:active{transform:scale(.97);}
   .modechip{font-size:10px;padding:3px 8px;border-radius:999px;font-weight:800;}
   .modechip.server{background:#DCFCE7;color:#15803D;}
   .modechip.local{background:#FEF3C7;color:#B45309;}
@@ -190,8 +192,8 @@
   .field:focus{outline:none;border-color:var(--blue);}
 
   /* login */
-  .login{position:fixed;inset:0;background:linear-gradient(160deg,#F59E0B,#EF4444);z-index:70;display:flex;align-items:center;justify-content:center;padding:20px;}
-  .login .box{background:#fff;border-radius:28px;padding:24px 20px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .login{position:fixed;inset:0;background:linear-gradient(160deg,#F59E0B,#EF4444);z-index:70;display:flex;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .login .box{background:#fff;border-radius:28px;padding:24px 20px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto;}
   .login h2{margin:0 0 4px;text-align:center;font-size:22px;}
   .login .sub{text-align:center;color:var(--sub);font-size:13px;margin-bottom:18px;}
   .accts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
@@ -324,6 +326,7 @@
     <h3 id="menuName">—</h3>
     <div class="desc" id="menuRole">—</div>
     <button id="menuPinBtn" class="btn-ghost" style="width:100%;padding:13px;border:none;border-radius:14px;font-size:15px;font-weight:800;background:#F1F5F9;margin-bottom:8px;" onclick="changeMyPin()">🔑 修改我的密码</button>
+    <button id="fontBtnMenu" class="btn-ghost" style="width:100%;padding:13px;border:none;border-radius:14px;font-size:15px;font-weight:800;background:#F1F5F9;margin-bottom:8px;" onclick="cycleFont()">🔠 字体：标准</button>
     <button class="btn-ghost" style="width:100%;padding:13px;border:none;border-radius:14px;font-size:15px;font-weight:800;background:#F1F5F9;" onclick="logout()">退出登录 / 切换账号</button>
   </div>
 </div>
@@ -338,6 +341,7 @@
     <div class="pinpad" id="pinPad"></div>
     <button class="go" onclick="doLogin()">登 录</button>
     <div class="hint">忘了密码？找管理员（妈妈/爸爸）在「管理 → 账号权限」里重置</div>
+    <button class="fontbtn" id="fontBtnLogin" onclick="cycleFont()">🔠 字体：标准</button>
   </div>
 </div>
 
@@ -540,16 +544,18 @@ const Local = {
       const cap=this.parseCap(item.freq);
       if(cap){ const used=this.usage(st,item.name,cap.period); if(used+qty>cap.max) return {error:`「${item.name}」${cap.period==='day'?'今日':'本周'}上限 ${cap.max}次，已用 ${used}次`,_c:400}; }
       const score=this.computeScore(item,body,st); const total=score*qty;
-      const direct=acc.role==='admin'||(acc.role==='elder'&&(acc.directDims||[]).includes(item.dim));
+      let direct=acc.role==='admin'||(acc.role==='elder'&&(acc.directDims||[]).includes(item.dim));
+      let notice='';
+      // 外公外婆学习类直接加分：单笔≤3、日累计≤6；超出不禁止，自动降级为申报待爸妈确认
       if(acc.role==='elder'&&direct){
-        if(total>3) return {error:`外公外婆学习类直接加分单笔不超过 3 分，本次为 ${total} 分`,_c:400};
         const used=this.usageScore(st,acc.name,'day');
-        if(used+total>6) return {error:`外公外婆学习类直接加分每日累计不超过 6 分，今日已用 ${used} 分`,_c:400};
+        if(total>3){ direct=false; notice=`本次 ${total} 分超过单笔 3 分上限，已转为申报，等爸妈确认后计分`; }
+        else if(used+total>6){ direct=false; notice=`今日已直接加 ${used} 分，再加 ${total} 分会超过 6 分上限，已转为申报，等爸妈确认后计分`; }
       }
       const rec={id:Date.now()*1000+Math.floor(Math.random()*1000),ts:new Date().toLocaleString('zh-CN'),dim:item.dim,item:item.name,score:total,qty,type:'add',reason:body.reason||'',operator:acc.name,status:direct?'confirmed':'pending',approver:direct?acc.name:'',remarks:item.special==='rope'?{cont:Number(body.cont)||0,one:Number(body.one)||0}:undefined};
       st.records.unshift(rec); if(direct){st.points[item.dim]+=total;st.total+=total;}
       st.reminders=st.reminders.filter(rm=>rm.item!==item.name); this.saveState(st);
-      return {ok:true,status:rec.status}; }
+      return {ok:true,status:rec.status,notice}; }
     if(path==='/api/confirm'){ const st=this.loadState(); const r=st.records.find(x=>x.id===body.recId); if(!r)return{error:'记录不存在',_c:404};
       if(body.approve){ if(r.status!=='confirmed'){ r.status='confirmed'; r.approver=acc.name;
         if(r.type==='add'){st.points[r.dim]+=r.score;st.total+=r.score;} else if(r.type==='sub'){st.total+=r.score;} } }
@@ -597,6 +603,23 @@ async function call(path, body){
     return res;
   }
 }
+/* ============ 长辈大字模式（字体档位：标准 / 大 / 超大，记住选择） ============ */
+const FONT_STEPS=[{k:'std',z:1,label:'标准'},{k:'big',z:1.2,label:'大'},{k:'xbig',z:1.4,label:'超大'}];
+function curFont(){ const v=localStorage.getItem('zfont'); return FONT_STEPS.find(x=>x.k===v)||FONT_STEPS[0]; }
+function applyFont(){
+  const f=curFont();
+  document.documentElement.style.zoom = (f.z===1?'':String(f.z));
+  const label='🔠 字体：'+f.label;
+  ['fontBtnLogin','fontBtnMenu'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=label; });
+}
+function cycleFont(){
+  const i=FONT_STEPS.findIndex(x=>x.k===curFont().k);
+  const n=FONT_STEPS[(i+1)%FONT_STEPS.length];
+  localStorage.setItem('zfont',n.k);
+  applyFont();
+  toast('字体已切换为「'+n.label+'」'+(n.k==='std'?'':'，已记住，下次打开还是这么大'));
+}
+
 async function fetchState(){
   if(MODE==='server'){ try{ STATE=await call('/api/state'); }catch(e){} }
   else STATE=Local.loadState();
@@ -619,6 +642,7 @@ async function fetchState(){
   document.getElementById('modeChip').textContent = MODE==='server'?'已联网·多端同步':'本地模式·未同步';
   document.getElementById('modeChip').className = 'modechip '+(MODE==='server'?'server':'local');
   document.getElementById('refreshBtn').style.display = MODE==='server'?'':'none';
+  applyFont();
   openLogin();
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden && ME){ fetchState().then(renderAll); } });
 })();
@@ -1076,7 +1100,8 @@ async function submitScore(){
   const payload={ item:it.name, score, qty:ss.qty, reason, subs:ss.subs, cont:ss.rope.cont, one:ss.rope.one };
   try{ const d=await call('/api/record',payload); closeSheet();
     await fetchState(); renderAll();
-    if(d.status==='confirmed'){ toast(`已加分 +${score*ss.qty} ✅`); sparkle(); } else toast('已提交申报，等爸妈确认 📝');
+    if(d.notice) toast(d.notice);
+    else if(d.status==='confirmed'){ toast(`已加分 +${score*ss.qty} ✅`); sparkle(); } else toast('已提交申报，等爸妈确认 📝');
   }catch(e){ toast(e.message||'提交失败'); }
 }
 

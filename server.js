@@ -301,12 +301,19 @@ const server = http.createServer((req, res) => {
       }
       const score = computeScore(item, b);
       const totalScore = score * qty;
-      const direct = acc.role === 'admin' || (acc.role === 'elder' && (acc.directDims || []).includes(item.dim));
-      // 外公外婆学习类直接加分：单笔≤3分，日累计≤6分
+      let direct = acc.role === 'admin' || (acc.role === 'elder' && (acc.directDims || []).includes(item.dim));
+      let notice = '';
+      // 外公外婆学习类直接加分：单笔≤3分、日累计≤6分。
+      // 超出不禁止提交，而是自动降级为「申报」，待爸妈确认后计分。
       if (acc.role === 'elder' && direct) {
-        if (totalScore > 3) return err(res, 400, `外公外婆学习类直接加分单笔不超过 3 分，本次为 ${totalScore} 分`);
         const used = usageScore(acc.name, 'day');
-        if (used + totalScore > 6) return err(res, 400, `外公外婆学习类直接加分每日累计不超过 6 分，今日已用 ${used} 分`);
+        if (totalScore > 3) {
+          direct = false;
+          notice = `本次 ${totalScore} 分超过单笔 3 分上限，已转为申报，等爸妈确认后计分`;
+        } else if (used + totalScore > 6) {
+          direct = false;
+          notice = `今日已直接加 ${used} 分，再加 ${totalScore} 分会超过 6 分上限，已转为申报，等爸妈确认后计分`;
+        }
       }
       const rec = {
         id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
@@ -321,7 +328,7 @@ const server = http.createServer((req, res) => {
       // 宝宝点击「我做到了」生成的提醒，在大人提交对应项目后自动消除
       state.reminders = state.reminders.filter(rm => rm.item !== item.name);
       saveState();
-      return ok(res, { ok: true, status: rec.status });
+      return ok(res, { ok: true, status: rec.status, notice });
     }
 
     // 宝宝提醒：孩子点击「我做到了」生成，大人可见
